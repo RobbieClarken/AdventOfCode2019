@@ -6,12 +6,34 @@ const OPCODE_ADD: u32 = 1;
 const OPCODE_MULTIPLY: u32 = 2;
 
 fn main() -> Result<()> {
-    let mut program = read_program("input")?;
+    let program = read_program("input")?;
+    challenge_1(&program);
+    challenge_2(&program);
+    Ok(())
+}
+
+fn challenge_1(program: &[u32]) {
+    let mut program = program.to_owned();
     program[1] = 12;
     program[2] = 2;
     run(&mut program);
-    println!("value left at position 0: {}", program[0]);
-    Ok(())
+    println!("Challenge 1: Value left at position 0 = {}", program[0]);
+}
+
+fn challenge_2(program: &[u32]) {
+    let target = 19690720;
+    for noun in 0..=99 {
+        for verb in 0..=99 {
+            let mut program = program.to_owned();
+            program[1] = noun;
+            program[2] = verb;
+            run(&mut program);
+            if program[0] == target {
+                println!("Challenge 2: 100 * noun + verb = {}", 100 * noun + verb);
+                return;
+            }
+        }
+    }
 }
 
 fn read_program(filename: &str) -> Result<Vec<u32>> {
