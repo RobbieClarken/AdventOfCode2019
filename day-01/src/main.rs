@@ -15,7 +15,7 @@ fn challenge_1(input: &[i32]) {
 
 fn challenge_2(input: &[i32]) {
     let output: i32 = input.iter().map(|v| fuel_required(*v)).sum();
-    println!("Challenge 1: {}", output);
+    println!("Challenge 2: {}", output);
 }
 
 fn read_input(filename: &str) -> Result<Vec<i32>> {
