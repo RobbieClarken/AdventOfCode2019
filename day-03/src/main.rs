@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io;
 use std::io::ErrorKind::InvalidData;
@@ -30,11 +30,20 @@ fn main() -> io::Result<()> {
     } else {
         println!("Challenge 1: No intersections found");
     }
+    if let Some(distance) = min_steps_for_paths(&input[0], &input[1]) {
+        println!("Challenge 2: {}", distance);
+    } else {
+        println!("Challenge 2: No intersections found");
+    }
     Ok(())
 }
 
 fn min_distance_for_paths(path1: &[Step], path2: &[Step]) -> Option<u32> {
     min_distance(&find_intersections(path1, path2))
+}
+
+fn min_steps_for_paths(path1: &[Step], path2: &[Step]) -> Option<u32> {
+    min_steps(&find_intersections(path1, path2), path1, path2)
 }
 
 fn read_input(filename: &str) -> io::Result<Vec<Vec<Step>>> {
@@ -89,6 +98,34 @@ fn min_distance(points: &[(i32, i32)]) -> Option<u32> {
     points.iter().map(|p| manhattan_distance(*p)).min()
 }
 
+fn min_steps(points: &[(i32, i32)], path1: &[Step], path2: &[Step]) -> Option<u32> {
+    if points.is_empty() {
+        return None;
+    }
+    let mut steps: HashMap<(i32, i32), Vec<u32>> = Default::default();
+    let mut path_steps = 0;
+    walk(path1, |pos| {
+        path_steps += 1;
+        if points.contains(&pos) {
+            steps.entry(pos).or_insert_with(|| vec![path_steps]);
+        }
+    });
+    path_steps = 0;
+    walk(path2, |pos| {
+        path_steps += 1;
+        if points.contains(&pos) {
+            let v = steps.get_mut(&pos).unwrap();
+            if v.len() < 2 {
+                v.push(path_steps);
+            }
+        }
+    });
+    steps
+        .iter()
+        .map(|(_, path_steps)| path_steps.iter().sum())
+        .min()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,58 +145,6 @@ mod tests {
     }
 
     #[test]
-    fn finds_intersections_when_paths_dont_intersect() {
-        assert_eq!(find_intersections(&[Step('L', 1)], &[Step('R', 1)]), vec![]);
-    }
-
-    #[test]
-    fn finds_intersections_for_trivial_cases() {
-        assert_eq!(
-            find_intersections(&[Step('L', 1)], &[Step('L', 1)]),
-            vec![(-1, 0)]
-        );
-        assert_eq!(
-            find_intersections(&[Step('R', 1)], &[Step('R', 1)]),
-            vec![(1, 0)]
-        );
-        assert_eq!(
-            find_intersections(&[Step('U', 1)], &[Step('U', 1)]),
-            vec![(0, 1)]
-        );
-        assert_eq!(
-            find_intersections(&[Step('D', 1)], &[Step('D', 1)]),
-            vec![(0, -1)]
-        );
-    }
-
-    #[test]
-    fn finds_intersections_for_complex_cases() {
-        assert_eq!(
-            find_intersections(&[Step('L', 2)], &[Step('L', 2)]),
-            vec![(-1, 0), (-2, 0)]
-        );
-        assert_eq!(
-            find_intersections(
-                &[Step('L', 1), Step('U', 1), Step('R', 1)],
-                &[Step('R', 1), Step('U', 1), Step('L', 1)]
-            ),
-            vec![(0, 1)]
-        );
-    }
-
-    #[test]
-    fn calculates_manhattan_distance() {
-        assert_eq!(manhattan_distance((3, 4)), 7);
-        assert_eq!(manhattan_distance((-3, 4)), 7);
-        assert_eq!(manhattan_distance((3, -4)), 7);
-    }
-
-    #[test]
-    fn finds_min_distance() {
-        assert_eq!(min_distance(&[(3, 4), (2, 3), (-5, 1)]), Some(5));
-    }
-
-    #[test]
     fn finds_min_distance_for_paths() {
         let path1 = parse_line("R75,D30,R83,U83,L12,D49,R71,U7,L72");
         let path2 = parse_line("U62,R66,U55,R34,D71,R55,D58,R83");
@@ -168,5 +153,20 @@ mod tests {
         let path1 = parse_line("R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51");
         let path2 = parse_line("U98,R91,D20,R16,D67,R40,U7,R15,U6,R7");
         assert_eq!(min_distance_for_paths(&path1, &path2), Some(135));
+    }
+
+    #[test]
+    fn finds_min_steps_for_paths() {
+        let path1 = parse_line("R8,U5,L5,D3");
+        let path2 = parse_line("U7,R6,D4,L4");
+        assert_eq!(min_steps_for_paths(&path1, &path2), Some(30));
+
+        let path1 = parse_line("R75,D30,R83,U83,L12,D49,R71,U7,L72");
+        let path2 = parse_line("U62,R66,U55,R34,D71,R55,D58,R83");
+        assert_eq!(min_steps_for_paths(&path1, &path2), Some(610));
+
+        let path1 = parse_line("R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51");
+        let path2 = parse_line("U98,R91,D20,R16,D67,R40,U7,R15,U6,R7");
+        assert_eq!(min_steps_for_paths(&path1, &path2), Some(410));
     }
 }
