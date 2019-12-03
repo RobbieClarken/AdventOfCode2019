@@ -25,39 +25,48 @@ impl FromStr for Step {
 
 fn main() -> io::Result<()> {
     let input = read_input("input")?;
-    let intersections = find_intersections(&input[0], &input[1]);
-    println!("{:?}", intersections);
+    if let Some(distance) = min_distance_for_paths(&input[0], &input[1]) {
+        println!("Challenge 1: {}", distance);
+    } else {
+        println!("Challenge 1: No intersections found");
+    }
     Ok(())
+}
+
+fn min_distance_for_paths(path1: &[Step], path2: &[Step]) -> Option<u32> {
+    min_distance(&find_intersections(path1, path2))
 }
 
 fn read_input(filename: &str) -> io::Result<Vec<Vec<Step>>> {
     let mut buffer = String::new();
     File::open(filename)?.read_to_string(&mut buffer)?;
-    Ok(buffer
-        .lines()
-        .map(|l| l.split(',').map(|s| s.parse().unwrap()).collect())
-        .collect())
+    Ok(buffer.lines().map(parse_line).collect())
+}
+
+fn parse_line(line: &str) -> Vec<Step> {
+    line.split(',').map(|s| s.parse().unwrap()).collect()
 }
 
 fn find_intersections(path1: &[Step], path2: &[Step]) -> Vec<(i32, i32)> {
     let mut visited: HashSet<(i32, i32)> = Default::default();
-    let mut pos = (0, 0);
-    for step in path1 {
-        let (x, y) = match step.0 {
-            'L' => (-1, 0),
-            'R' => (1, 0),
-            'U' => (0, 1),
-            'D' => (0, -1),
-            _ => unreachable!(),
-        };
-        for _ in 0..step.1 {
-            pos = (pos.0 + x, pos.1 + y);
-            visited.insert(pos);
-        }
-    }
+    walk(path1, |pos| {
+        visited.insert(pos);
+    });
     let mut intersections = vec![];
-    pos = (0, 0);
-    for step in path2 {
+    walk(path2, |pos| {
+        if visited.contains(&pos) {
+            intersections.push(pos);
+        }
+    });
+    intersections
+}
+
+fn walk<F>(path: &[Step], mut func: F)
+where
+    F: FnMut((i32, i32)) -> (),
+{
+    let mut pos = (0, 0);
+    for step in path {
         let (x, y) = match step.0 {
             'L' => (-1, 0),
             'R' => (1, 0),
@@ -67,12 +76,17 @@ fn find_intersections(path1: &[Step], path2: &[Step]) -> Vec<(i32, i32)> {
         };
         for _ in 0..step.1 {
             pos = (pos.0 + x, pos.1 + y);
-            if visited.contains(&pos) {
-                intersections.push(pos);
-            }
+            func(pos);
         }
     }
-    intersections
+}
+
+fn manhattan_distance(loc: (i32, i32)) -> u32 {
+    (loc.0.abs() + loc.1.abs()) as u32
+}
+
+fn min_distance(points: &[(i32, i32)]) -> Option<u32> {
+    points.iter().map(|p| manhattan_distance(*p)).min()
 }
 
 #[cfg(test)]
@@ -131,5 +145,28 @@ mod tests {
             ),
             vec![(0, 1)]
         );
+    }
+
+    #[test]
+    fn calculates_manhattan_distance() {
+        assert_eq!(manhattan_distance((3, 4)), 7);
+        assert_eq!(manhattan_distance((-3, 4)), 7);
+        assert_eq!(manhattan_distance((3, -4)), 7);
+    }
+
+    #[test]
+    fn finds_min_distance() {
+        assert_eq!(min_distance(&[(3, 4), (2, 3), (-5, 1)]), Some(5));
+    }
+
+    #[test]
+    fn finds_min_distance_for_paths() {
+        let path1 = parse_line("R75,D30,R83,U83,L12,D49,R71,U7,L72");
+        let path2 = parse_line("U62,R66,U55,R34,D71,R55,D58,R83");
+        assert_eq!(min_distance_for_paths(&path1, &path2), Some(159));
+
+        let path1 = parse_line("R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51");
+        let path2 = parse_line("U98,R91,D20,R16,D67,R40,U7,R15,U6,R7");
+        assert_eq!(min_distance_for_paths(&path1, &path2), Some(135));
     }
 }
