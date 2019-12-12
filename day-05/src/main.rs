@@ -6,13 +6,12 @@ use std::io::{Read, Result};
 
 fn main() -> Result<()> {
     let program = read_program("input")?;
-    challenge_1(&program);
+    challenge_1(program);
     Ok(())
 }
 
-fn challenge_1(program: &[i32]) {
-    let mut program = program.to_owned();
-    let output = Executor::run(&mut program, vec![1]);
+fn challenge_1(program: Vec<i32>) {
+    let output = Executor::run(program, vec![1]);
     for err_code in output[..output.len() - 1].iter() {
         assert_eq!(*err_code, 0);
     }

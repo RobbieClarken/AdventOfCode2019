@@ -29,15 +29,15 @@ impl ModeGenerator {
     }
 }
 
-pub struct Executor<'a> {
-    program: &'a mut Vec<i32>,
+pub struct Executor {
+    program: Vec<i32>,
     input: VecDeque<i32>,
     output: Vec<i32>,
     pos: usize,
 }
 
-impl<'a> Executor<'a> {
-    pub fn run(program: &'a mut Vec<i32>, input: Vec<i32>) -> Vec<i32> {
+impl Executor {
+    pub fn run(program: Vec<i32>, input: Vec<i32>) -> Vec<i32> {
         let mut executor = Self {
             program,
             input: VecDeque::from(input),
@@ -114,39 +114,79 @@ mod executor_tests {
 
     #[test]
     fn performs_addition() {
-        let mut arr: Vec<i32> = vec![1, 0, 0, 0, 99];
-        Executor::run(&mut arr, vec![]);
-        assert_eq!(arr, vec![2, 0, 0, 0, 99]);
+        let program: Vec<i32> = vec![
+            1,  // 0: add
+            7,  // 1: addr 7 = 2
+            8,  // 2: addr 8 = 2,
+            0,  // 3: addr 0
+            4,  // 4: output
+            0,  // 5: addr 0
+            99, // 6: halt
+            2,  // 7
+            3,  // 8
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![5]);
     }
 
     #[test]
     fn performs_multiplication() {
-        let mut arr: Vec<i32> = vec![2, 3, 0, 3, 99];
-        Executor::run(&mut arr, vec![]);
-        assert_eq!(arr, vec![2, 3, 0, 6, 99]);
+        let program: Vec<i32> = vec![
+            2,  // 0: multiply
+            7,  // 1: addr 7 = 2
+            8,  // 2: addr 8 = 2,
+            0,  // 3: addr 0
+            4,  // 4: output
+            0,  // 5: addr 0
+            99, // 6: halt
+            2,  // 7
+            3,  // 8
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![6]);
     }
 
     #[test]
     fn handles_input_opcode() {
-        let mut arr: Vec<i32> = vec![3, 0, 99];
-        Executor::run(&mut arr, vec![101]);
-        assert_eq!(arr, vec![101, 0, 99]);
+        let program: Vec<i32> = vec![
+            3,  // 0: input
+            0,  // 1: addr 0
+            4,  // 2: output
+            0,  // 3: addr 0
+            99, // 4: halt
+        ];
+        let out = Executor::run(program, vec![101]);
+        assert_eq!(out, vec![101]);
 
-        let mut arr: Vec<i32> = vec![3, 0, 3, 1, 99];
-        Executor::run(&mut arr, vec![101, 102]);
-        assert_eq!(arr, vec![101, 102, 3, 1, 99]);
+        let program: Vec<i32> = vec![
+            3,  // 0: input
+            0,  // 1: addr 0
+            3,  // 2: input
+            1,  // 3: addr 1
+            4,  // 4: output
+            1,  // 5: addr 1
+            99, // 6: halt
+        ];
+        let out = Executor::run(program, vec![101, 102]);
+        assert_eq!(out, vec![102]);
     }
 
     #[test]
     fn handles_output_opcode() {
-        let mut arr: Vec<i32> = vec![4, 0, 4, 4, 99];
-        let out = Executor::run(&mut arr, vec![101]);
+        let program = vec![
+            4,  // 0: output
+            0,  // 1: addr 0 = 4
+            4,  // 2: output
+            4,  // 3: addr 4 = 99
+            99, // 4: halt
+        ];
+        let out = Executor::run(program, vec![101]);
         assert_eq!(out, vec![4, 99]);
     }
 
     #[test]
     fn handles_immediate_mode_for_first_param() {
-        let mut arr: Vec<i32> = vec![
+        let program: Vec<i32> = vec![
             101, // 0: add (param 1 is immediate mode)
             20,  // 1: immediate mode value = 20
             7,   // 2: addr 7 value = 30
@@ -156,13 +196,13 @@ mod executor_tests {
             99,  // 6: halt
             30,  // 7
         ];
-        let out = Executor::run(&mut arr, vec![]);
+        let out = Executor::run(program, vec![]);
         assert_eq!(out, vec![50]);
     }
 
     #[test]
     fn handles_immediate_mode_for_second_param() {
-        let mut arr: Vec<i32> = vec![
+        let program: Vec<i32> = vec![
             1001, // 0: add (param 2 is immediate mode)
             7,    // 1: addr 7 value = 20
             30,   // 2: immediate mode value value = 30
@@ -172,18 +212,7 @@ mod executor_tests {
             99,   // 6: halt
             20,   // 7
         ];
-        let out = Executor::run(&mut arr, vec![]);
+        let out = Executor::run(program, vec![]);
         assert_eq!(out, vec![50]);
-    }
-
-    #[test]
-    fn handles_more_complicated_cases() {
-        let mut arr: Vec<i32> = vec![2, 4, 4, 5, 99, 0];
-        Executor::run(&mut arr, vec![]);
-        assert_eq!(arr, vec![2, 4, 4, 5, 99, 9801]);
-
-        let mut arr: Vec<i32> = vec![1, 1, 1, 4, 99, 5, 6, 0, 99];
-        Executor::run(&mut arr, vec![]);
-        assert_eq!(arr, vec![30, 1, 1, 4, 2, 5, 6, 0, 99]);
     }
 }
