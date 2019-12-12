@@ -21,7 +21,7 @@ fn challenge_1(program: &[u32]) {
 }
 
 fn challenge_2(program: &[u32]) {
-    let target = 19690720;
+    let target = 19_690_720;
     for noun in 0..=99 {
         for verb in 0..=99 {
             let mut program = program.to_owned();

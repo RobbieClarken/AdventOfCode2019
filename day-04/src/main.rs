@@ -1,3 +1,5 @@
+#![allow(clippy::unreadable_literal)]
+
 const TEN: u32 = 10;
 
 fn main() {

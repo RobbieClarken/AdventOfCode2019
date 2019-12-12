@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        language: script
+        entry: /usr/bin/env rustfmt
+        types: [rust]
+
+      - id: clippy
+        name: clippy
+        language: script
+        entry: /usr/bin/env bash -euc 'for d in day-*; do (cd $d && cargo clippy -- -D warnings); done'
+        pass_filenames: false

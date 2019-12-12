@@ -66,8 +66,8 @@ impl<'a> Executor<'a> {
         let val = self.read();
         let opcode = val % 100;
         let mode_gen = ModeGenerator { val: val / 100 };
-        let opcode =
-            FromPrimitive::from_i32(opcode).expect(&format!("unexpected opcode: {}", opcode));
+        let opcode = FromPrimitive::from_i32(opcode)
+            .unwrap_or_else(|| panic!("unexpected opcode: {}", opcode));
         (opcode, mode_gen)
     }
 
