@@ -10,6 +10,7 @@ enum Opcode {
     Input = 3,
     Output = 4,
     JumpIfTrue = 5,
+    JumpIfFalse = 6,
 }
 
 #[derive(FromPrimitive)]
@@ -53,6 +54,7 @@ impl Executor {
                 (Opcode::Add, mg) => executor.op_add(mg),
                 (Opcode::Multiply, mg) => executor.op_multiply(mg),
                 (Opcode::JumpIfTrue, mg) => executor.op_jump_if_true(mg),
+                (Opcode::JumpIfFalse, mg) => executor.op_jump_if_false(mg),
             }
         }
         executor.output
@@ -91,10 +93,21 @@ impl Executor {
         self.output.push(v)
     }
 
-    fn op_jump_if_true(&mut self, mut mode_gen: ModeGenerator) {
+    fn op_jump_if_true(&mut self, mode_gen: ModeGenerator) {
+        self.perform_jump_if(|v| v != 0, mode_gen);
+    }
+
+    fn op_jump_if_false(&mut self, mode_gen: ModeGenerator) {
+        self.perform_jump_if(|v| v == 0, mode_gen);
+    }
+
+    fn perform_jump_if<F>(&mut self, test: F, mut mode_gen: ModeGenerator)
+    where
+        F: FnOnce(i32) -> bool,
+    {
         let test_val = self.read_param(&mut mode_gen);
         let dest = self.read_param(&mut mode_gen) as usize;
-        if test_val != 0 {
+        if test(test_val) {
             self.pos = dest;
         }
     }
@@ -253,5 +266,34 @@ mod executor_tests {
         ];
         let out = Executor::run(program, vec![]);
         assert_eq!(out, vec![102]);
+    }
+
+    #[test]
+    fn handles_jump_if_false() {
+        let program: Vec<i32> = vec![
+            11_06, // 0: jump if false
+            0,     // 1: false
+            5,     // 2: addr 5
+            1_04,  // 3: output (jumped)
+            101,   // 4: value 101 (jumped)
+            1_04,  // 5: output
+            102,   // 6: value 102
+            99,    // 7: halt
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![102]);
+
+        let program: Vec<i32> = vec![
+            11_06, // 0: jump if true
+            1,     // 1: true
+            5,     // 2: addr 5 (not used)
+            1_04,  // 3: output
+            101,   // 4: value 101
+            1_04,  // 5: output
+            102,   // 6: value 102
+            99,    // 7: halt
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![101, 102]);
     }
 }
