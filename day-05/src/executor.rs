@@ -8,29 +8,34 @@ enum Opcode {
     Add = 1,
     Multiply = 2,
     Input = 3,
+    Output = 4,
 }
 
 pub struct Executor<'a> {
     program: &'a mut Vec<i32>,
     input: VecDeque<i32>,
+    output: Vec<i32>,
     pos: usize,
 }
 
 impl<'a> Executor<'a> {
-    pub fn run(program: &'a mut Vec<i32>, input: Vec<i32>) {
+    pub fn run(program: &'a mut Vec<i32>, input: Vec<i32>) -> Vec<i32> {
         let mut executor = Self {
             program,
             input: VecDeque::from(input),
             pos: 0,
+            output: Vec::new(),
         };
         loop {
             match executor.read_opcode() {
                 Opcode::Halt => break,
                 Opcode::Input => executor.op_input(),
+                Opcode::Output => executor.op_output(),
                 Opcode::Add => executor.op_add(),
                 Opcode::Multiply => executor.op_multiply(),
             }
         }
+        executor.output
     }
 
     fn read(&mut self) -> i32 {
@@ -52,6 +57,11 @@ impl<'a> Executor<'a> {
     fn op_input(&mut self) {
         let out_addr = self.read() as usize;
         self.program[out_addr] = self.input.pop_front().expect("insufficient input values");
+    }
+
+    fn op_output(&mut self) {
+        let v = self.read_param();
+        self.output.push(v)
     }
 
     fn op_add(&mut self) {
@@ -101,6 +111,14 @@ mod executor_tests {
         Executor::run(&mut arr, vec![101, 102]);
         assert_eq!(arr, vec![101, 102, 3, 1, 99]);
     }
+
+    #[test]
+    fn handles_output_opcode() {
+        let mut arr: Vec<i32> = vec![4, 0, 4, 4, 99];
+        let out = Executor::run(&mut arr, vec![101]);
+        assert_eq!(out, vec![4, 99]);
+    }
+
 
     #[test]
     fn handles_more_complicated_cases() {
