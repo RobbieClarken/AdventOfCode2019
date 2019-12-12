@@ -9,6 +9,7 @@ enum Opcode {
     Multiply = 2,
     Input = 3,
     Output = 4,
+    JumpIfTrue = 5,
 }
 
 #[derive(FromPrimitive)]
@@ -51,6 +52,7 @@ impl Executor {
                 (Opcode::Output, mg) => executor.op_output(mg),
                 (Opcode::Add, mg) => executor.op_add(mg),
                 (Opcode::Multiply, mg) => executor.op_multiply(mg),
+                (Opcode::JumpIfTrue, mg) => executor.op_jump_if_true(mg),
             }
         }
         executor.output
@@ -87,6 +89,14 @@ impl Executor {
     fn op_output(&mut self, mut mode_gen: ModeGenerator) {
         let v = self.read_param(&mut mode_gen);
         self.output.push(v)
+    }
+
+    fn op_jump_if_true(&mut self, mut mode_gen: ModeGenerator) {
+        let test_val = self.read_param(&mut mode_gen);
+        let dest = self.read_param(&mut mode_gen) as usize;
+        if test_val != 0 {
+            self.pos = dest;
+        }
     }
 
     fn op_add(&mut self, mut mode_gen: ModeGenerator) {
@@ -214,5 +224,34 @@ mod executor_tests {
         ];
         let out = Executor::run(program, vec![]);
         assert_eq!(out, vec![50]);
+    }
+
+    #[test]
+    fn handles_jump_if_true() {
+        let program: Vec<i32> = vec![
+            11_05, // 0: jump if true
+            0,     // 1: false
+            5,     // 2: addr 5 (not used)
+            1_04,  // 3: output
+            101,   // 4: value 101
+            1_04,  // 5: output
+            102,   // 6: value 102
+            99,    // 7: halt
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![101, 102]);
+
+        let program: Vec<i32> = vec![
+            11_05, // 0: jump if true
+            1,     // 1: true
+            5,     // 2: addr 5 (jumped)
+            1_04,  // 3: output (jumped)
+            101,   // 4: value 101
+            1_04,  // 5: output
+            102,   // 6: value 102
+            99,    // 7: halt
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![102]);
     }
 }
