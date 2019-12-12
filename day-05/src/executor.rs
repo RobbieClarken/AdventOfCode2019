@@ -162,7 +162,7 @@ mod executor_tests {
         let program: Vec<i32> = vec![
             1,  // 0: add
             7,  // 1: addr 7 = 2
-            8,  // 2: addr 8 = 2,
+            8,  // 2: addr 8 = 3,
             0,  // 3: addr 0
             4,  // 4: output
             0,  // 5: addr 0

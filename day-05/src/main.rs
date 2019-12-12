@@ -6,7 +6,8 @@ use std::io::{Read, Result};
 
 fn main() -> Result<()> {
     let program = read_program("input")?;
-    challenge_1(program);
+    challenge_1(program.clone());
+    challenge_2(program);
     Ok(())
 }
 
@@ -16,6 +17,14 @@ fn challenge_1(program: Vec<i32>) {
         assert_eq!(*err_code, 0);
     }
     println!("Challenge 1: Diagnostic code = {}", output.last().unwrap());
+}
+
+fn challenge_2(program: Vec<i32>) {
+    let output = Executor::run(program, vec![5]);
+    for err_code in output[..output.len() - 1].iter() {
+        assert_eq!(*err_code, 0);
+    }
+    println!("Challenge 2: Diagnostic code = {}", output.last().unwrap());
 }
 
 fn read_program(filename: &str) -> Result<Vec<i32>> {
