@@ -12,6 +12,7 @@ enum Opcode {
     JumpIfTrue = 5,
     JumpIfFalse = 6,
     LessThan = 7,
+    Equals = 8,
 }
 
 #[derive(FromPrimitive)]
@@ -57,6 +58,7 @@ impl Executor {
                 (Opcode::JumpIfTrue, mg) => executor.op_jump_if_true(mg),
                 (Opcode::JumpIfFalse, mg) => executor.op_jump_if_false(mg),
                 (Opcode::LessThan, mg) => executor.op_less_than(mg),
+                (Opcode::Equals, mg) => executor.op_equals(mg),
             }
         }
         executor.output
@@ -114,11 +116,22 @@ impl Executor {
         }
     }
 
-    fn op_less_than(&mut self, mut mode_gen: ModeGenerator) {
+    fn op_less_than(&mut self, mode_gen: ModeGenerator) {
+        self.perform_comparison(|v1, v2| v1 < v2, mode_gen);
+    }
+
+    fn op_equals(&mut self, mode_gen: ModeGenerator) {
+        self.perform_comparison(|v1, v2| v1 == v2, mode_gen);
+    }
+
+    fn perform_comparison<F>(&mut self, test: F, mut mode_gen: ModeGenerator)
+    where
+        F: FnOnce(i32, i32) -> bool,
+    {
         let v1 = self.read_param(&mut mode_gen);
         let v2 = self.read_param(&mut mode_gen);
         let dest = self.read_param(&mut mode_gen) as usize;
-        self.program[dest] = if v1 < v2 { 1 } else { 0 };
+        self.program[dest] = if test(v1, v2) { 1 } else { 0 };
     }
 
     fn op_add(&mut self, mut mode_gen: ModeGenerator) {
@@ -322,8 +335,8 @@ mod executor_tests {
 
         let program: Vec<i32> = vec![
             111_07, // 0: less-than
-            102,    // 1: 101
-            101,    // 2: 102
+            102,    // 1: 102
+            101,    // 2: 101
             0,      // 3: addr 0
             4,      // 4: output
             0,      // 5: addr 0 (value = 0)
@@ -335,7 +348,34 @@ mod executor_tests {
         let program: Vec<i32> = vec![
             111_07, // 0: less-than
             101,    // 1: 101
-            101,    // 2: 102
+            101,    // 2: 101
+            0,      // 3: addr 0
+            4,      // 4: output
+            0,      // 5: addr 0 (value = 0)
+            99,     // 6: halt
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![0]);
+    }
+
+    #[test]
+    fn handles_equals() {
+        let program: Vec<i32> = vec![
+            111_08, // 0: equals
+            101,    // 1: 101
+            101,    // 2: 101
+            0,      // 3: addr 0
+            4,      // 4: output
+            0,      // 5: addr 0 (value = 1)
+            99,     // 6: halt
+        ];
+        let out = Executor::run(program, vec![]);
+        assert_eq!(out, vec![1]);
+
+        let program: Vec<i32> = vec![
+            111_08, // 0: equals
+            101,    // 1: 101
+            102,    // 2: 102
             0,      // 3: addr 0
             4,      // 4: output
             0,      // 5: addr 0 (value = 0)
