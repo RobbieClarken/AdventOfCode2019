@@ -12,7 +12,11 @@ fn main() -> Result<()> {
 
 fn challenge_1(program: &[i32]) {
     let mut program = program.to_owned();
-    Executor::run(&mut program, vec![]);
+    let output = Executor::run(&mut program, vec![1]);
+    for err_code in output[..output.len() - 1].iter() {
+        assert_eq!(*err_code, 0);
+    }
+    println!("Challenge 1: Diagnostic code = {}", output.last().unwrap());
 }
 
 fn read_program(filename: &str) -> Result<Vec<i32>> {
