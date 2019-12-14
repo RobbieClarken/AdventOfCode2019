@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+  "day-07",
+  "intcode-computer",
+]
