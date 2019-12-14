@@ -62,7 +62,7 @@ fn contains_duplicates(values: &[i32]) -> bool {
 fn calc_signal(program: Vec<i32>, phases: Vec<i32>) -> i32 {
     let mut prev_signal = 0;
     for phase in phases {
-        let out = Computer::run(program.clone(), vec![phase, prev_signal]);
+        let (out, _) = Computer::load(program.clone()).run(vec![phase, prev_signal]);
         prev_signal = out[0];
     }
     prev_signal

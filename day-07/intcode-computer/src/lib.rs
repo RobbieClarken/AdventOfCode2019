@@ -41,27 +41,41 @@ pub struct Computer {
 }
 
 impl Computer {
-    pub fn run(program: Vec<i32>, input: Vec<i32>) -> Vec<i32> {
-        let mut executor = Self {
+    pub fn load(program: Vec<i32>) -> Self {
+        Self {
             program,
-            input: VecDeque::from(input),
+            input: VecDeque::new(),
             pos: 0,
             output: Vec::new(),
-        };
-        loop {
-            match executor.read_opcode() {
-                (Opcode::Halt, _) => break,
-                (Opcode::Input, _) => executor.op_input(),
-                (Opcode::Output, mg) => executor.op_output(mg),
-                (Opcode::Add, mg) => executor.op_add(mg),
-                (Opcode::Multiply, mg) => executor.op_multiply(mg),
-                (Opcode::JumpIfTrue, mg) => executor.op_jump_if_true(mg),
-                (Opcode::JumpIfFalse, mg) => executor.op_jump_if_false(mg),
-                (Opcode::LessThan, mg) => executor.op_less_than(mg),
-                (Opcode::Equals, mg) => executor.op_equals(mg),
-            }
         }
-        executor.output
+    }
+
+    pub fn run(&mut self, input: Vec<i32>) -> (Vec<i32>, bool) {
+        self.input = input.into();
+        self.output = Vec::new();
+
+        let completed = loop {
+            let start_pos = self.pos;
+            match self.read_opcode() {
+                (Opcode::Halt, _) => {
+                    break true;
+                }
+                (Opcode::Input, _) => {
+                    if !self.op_input() {
+                        self.pos = start_pos;
+                        break false;
+                    }
+                }
+                (Opcode::Output, mg) => self.op_output(mg),
+                (Opcode::Add, mg) => self.op_add(mg),
+                (Opcode::Multiply, mg) => self.op_multiply(mg),
+                (Opcode::JumpIfTrue, mg) => self.op_jump_if_true(mg),
+                (Opcode::JumpIfFalse, mg) => self.op_jump_if_false(mg),
+                (Opcode::LessThan, mg) => self.op_less_than(mg),
+                (Opcode::Equals, mg) => self.op_equals(mg),
+            }
+        };
+        (self.output.clone(), completed)
     }
 
     fn read(&mut self) -> i32 {
@@ -87,9 +101,13 @@ impl Computer {
         v
     }
 
-    fn op_input(&mut self) {
+    fn op_input(&mut self) -> bool {
+        if self.input.is_empty() {
+            return false;
+        }
         let out_addr = self.read() as usize;
         self.program[out_addr] = self.input.pop_front().expect("insufficient input values");
+        true
     }
 
     fn op_output(&mut self, mut mode_gen: ModeGenerator) {
@@ -170,7 +188,7 @@ mod computer_tests {
             2,  // 7
             3,  // 8
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![5]);
     }
 
@@ -187,7 +205,7 @@ mod computer_tests {
             2,  // 7
             3,  // 8
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![6]);
     }
 
@@ -200,7 +218,7 @@ mod computer_tests {
             0,  // 3: addr 0
             99, // 4: halt
         ];
-        let out = Computer::run(program, vec![101]);
+        let (out, _) = Computer::load(program).run(vec![101]);
         assert_eq!(out, vec![101]);
 
         let program: Vec<i32> = vec![
@@ -212,7 +230,7 @@ mod computer_tests {
             1,  // 5: addr 1
             99, // 6: halt
         ];
-        let out = Computer::run(program, vec![101, 102]);
+        let (out, _) = Computer::load(program).run(vec![101, 102]);
         assert_eq!(out, vec![102]);
     }
 
@@ -225,7 +243,7 @@ mod computer_tests {
             4,  // 3: addr 4 = 99
             99, // 4: halt
         ];
-        let out = Computer::run(program, vec![101]);
+        let (out, _) = Computer::load(program).run(vec![101]);
         assert_eq!(out, vec![4, 99]);
     }
 
@@ -241,7 +259,7 @@ mod computer_tests {
             99,  // 6: halt
             30,  // 7
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![50]);
     }
 
@@ -257,7 +275,7 @@ mod computer_tests {
             99,   // 6: halt
             20,   // 7
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![50]);
     }
 
@@ -273,7 +291,7 @@ mod computer_tests {
             102,   // 6: value 102
             99,    // 7: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![101, 102]);
 
         let program: Vec<i32> = vec![
@@ -286,7 +304,7 @@ mod computer_tests {
             102,   // 6: value 102
             99,    // 7: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![102]);
     }
 
@@ -302,7 +320,7 @@ mod computer_tests {
             102,   // 6: value 102
             99,    // 7: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![102]);
 
         let program: Vec<i32> = vec![
@@ -315,7 +333,7 @@ mod computer_tests {
             102,   // 6: value 102
             99,    // 7: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![101, 102]);
     }
 
@@ -330,7 +348,7 @@ mod computer_tests {
             0,      // 5: addr 0 (value = 1)
             99,     // 6: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![1]);
 
         let program: Vec<i32> = vec![
@@ -342,7 +360,7 @@ mod computer_tests {
             0,      // 5: addr 0 (value = 0)
             99,     // 6: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![0]);
 
         let program: Vec<i32> = vec![
@@ -354,7 +372,7 @@ mod computer_tests {
             0,      // 5: addr 0 (value = 0)
             99,     // 6: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![0]);
     }
 
@@ -369,7 +387,7 @@ mod computer_tests {
             0,      // 5: addr 0 (value = 1)
             99,     // 6: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![1]);
 
         let program: Vec<i32> = vec![
@@ -381,43 +399,67 @@ mod computer_tests {
             0,      // 5: addr 0 (value = 0)
             99,     // 6: halt
         ];
-        let out = Computer::run(program, vec![]);
+        let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![0]);
+    }
+
+    #[test]
+    fn handles_freezes_execution_if_insufficient_input() {
+        let program: Vec<i32> = vec![
+            3,  // 0: input
+            0,  // 1: addr 0
+            4,  // 2: output
+            8,  // 3: addr 8 = 99
+            3,  // 4: input
+            1,  // 5: addr 1
+            4,  // 6: output
+            1,  // 7: addr 1 = 102
+            99, // 8: halt
+        ];
+
+        let mut computer = Computer::load(program);
+        let (out, complete) = computer.run(vec![101]);
+        assert_eq!(out, vec![99]);
+        assert_eq!(complete, false);
+
+        let (out, complete) = computer.run(vec![102]);
+        assert_eq!(out, vec![102]);
+        assert_eq!(complete, true);
     }
 
     #[test]
     fn examples() {
         let program: Vec<i32> = vec![3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8];
-        assert_eq!(Computer::run(program.clone(), vec![8]), vec![1]);
-        assert_eq!(Computer::run(program.clone(), vec![101]), vec![0]);
+        assert_eq!(Computer::load(program.clone()).run(vec![8]).0, vec![1]);
+        assert_eq!(Computer::load(program.clone()).run(vec![101]).0, vec![0]);
 
         let program: Vec<i32> = vec![3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8];
-        assert_eq!(Computer::run(program.clone(), vec![7]), vec![1]);
-        assert_eq!(Computer::run(program.clone(), vec![8]), vec![0]);
+        assert_eq!(Computer::load(program.clone()).run(vec![7]).0, vec![1]);
+        assert_eq!(Computer::load(program.clone()).run(vec![8]).0, vec![0]);
 
         let program: Vec<i32> = vec![3, 3, 1108, -1, 8, 3, 4, 3, 99];
-        assert_eq!(Computer::run(program.clone(), vec![8]), vec![1]);
-        assert_eq!(Computer::run(program.clone(), vec![101]), vec![0]);
+        assert_eq!(Computer::load(program.clone()).run(vec![8]).0, vec![1]);
+        assert_eq!(Computer::load(program.clone()).run(vec![101]).0, vec![0]);
 
         let program: Vec<i32> = vec![3, 3, 1107, -1, 8, 3, 4, 3, 99];
-        assert_eq!(Computer::run(program.clone(), vec![7]), vec![1]);
-        assert_eq!(Computer::run(program.clone(), vec![8]), vec![0]);
+        assert_eq!(Computer::load(program.clone()).run(vec![7]).0, vec![1]);
+        assert_eq!(Computer::load(program.clone()).run(vec![8]).0, vec![0]);
 
         let program: Vec<i32> = vec![3, 12, 6, 12, 15, 1, 13, 14, 13, 4, 13, 99, -1, 0, 1, 9];
-        assert_eq!(Computer::run(program.clone(), vec![0]), vec![0]);
-        assert_eq!(Computer::run(program.clone(), vec![101]), vec![1]);
+        assert_eq!(Computer::load(program.clone()).run(vec![0]).0, vec![0]);
+        assert_eq!(Computer::load(program.clone()).run(vec![101]).0, vec![1]);
 
         let program: Vec<i32> = vec![3, 3, 1105, -1, 9, 1101, 0, 0, 12, 4, 12, 99, 1];
-        assert_eq!(Computer::run(program.clone(), vec![0]), vec![0]);
-        assert_eq!(Computer::run(program.clone(), vec![101]), vec![1]);
+        assert_eq!(Computer::load(program.clone()).run(vec![0]).0, vec![0]);
+        assert_eq!(Computer::load(program.clone()).run(vec![101]).0, vec![1]);
 
         let program: Vec<i32> = vec![
             3, 21, 1008, 21, 8, 20, 1005, 20, 22, 107, 8, 21, 20, 1006, 20, 31, 1106, 0, 36, 98, 0,
             0, 1002, 21, 125, 20, 4, 20, 1105, 1, 46, 104, 999, 1105, 1, 46, 1101, 1000, 1, 20, 4,
             20, 1105, 1, 46, 98, 99,
         ];
-        assert_eq!(Computer::run(program.clone(), vec![7]), vec![999]);
-        assert_eq!(Computer::run(program.clone(), vec![8]), vec![1000]);
-        assert_eq!(Computer::run(program.clone(), vec![9]), vec![1001]);
+        assert_eq!(Computer::load(program.clone()).run(vec![7]).0, vec![999]);
+        assert_eq!(Computer::load(program.clone()).run(vec![8]).0, vec![1000]);
+        assert_eq!(Computer::load(program.clone()).run(vec![9]).0, vec![1001]);
     }
 }
