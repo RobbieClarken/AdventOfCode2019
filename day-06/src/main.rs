@@ -1,18 +1,27 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 use std::rc::Rc;
 
 fn main() {
-    challenge_1();
+    let input = read_input("input");
+    challenge_1(&input);
+    challenge_2(&input);
 }
 
-fn challenge_1() {
-    let input = read_input("input");
+fn challenge_1(input: &str) {
     println!(
         "Challenge 1: Total number of orbits = {}",
         number_of_orbits(&input)
+    );
+}
+
+fn challenge_2(input: &str) {
+    println!(
+        "Challenge 2: Number of orbital transfers = {}",
+        number_of_transfers("YOU", "SAN", Node::parse(&input))
     );
 }
 
@@ -33,6 +42,19 @@ fn number_of_orbits(s: &str) -> u32 {
     });
     walk(root, visit);
     orbits
+}
+
+fn number_of_transfers(o1: &str, o2: &str, tree: RcNode) -> i32 {
+    let path_to_o1 = path_to(o1, Rc::clone(&tree)).unwrap();
+    let path_to_o2 = path_to(o2, Rc::clone(&tree)).unwrap();
+    let mut common_path_length = 0;
+    for (p1, p2) in path_to_o1.iter().zip(&path_to_o2) {
+        if p1 != p2 {
+            break;
+        }
+        common_path_length += 1;
+    }
+    path_to_o1.len() as i32 + path_to_o2.len() as i32 - 2 * common_path_length
 }
 
 type RcNode = Rc<RefCell<Node>>;
@@ -109,6 +131,20 @@ where
         visit = walk(Rc::clone(&child), visit);
     }
     visit
+}
+
+fn path_to(label: &str, node: RcNode) -> Option<VecDeque<String>> {
+    let node_label = node.borrow().label.to_owned();
+    if node_label == label {
+        return Some(VecDeque::new());
+    }
+    for child in &node.borrow().children {
+        if let Some(mut path) = path_to(label, Rc::clone(&child)) {
+            path.push_front(node_label);
+            return Some(path);
+        }
+    }
+    None
 }
 
 fn number_of_ancestors(node: RcNode) -> u32 {
@@ -267,5 +303,42 @@ mod tests {
             "#,
         );
         assert_eq!(orbits, 42);
+    }
+
+    #[test]
+    fn calculates_orbital_transfers() {
+        //  A ― X
+        //   \
+        //    Y
+        let tree = Node::parse(
+            r#"
+            A)X
+            A)Y
+            "#,
+        );
+        assert_eq!(number_of_transfers("X", "Y", Rc::clone(&tree)), 0);
+        //  A ― B ― X
+        //   \
+        //    Y
+        let tree = Node::parse(
+            r#"
+            A)B
+            B)X
+            A)Y
+            "#,
+        );
+        assert_eq!(number_of_transfers("X", "Y", Rc::clone(&tree)), 1);
+        //  A ― B ― X
+        //   \
+        //    C ― Y
+        let tree = Node::parse(
+            r#"
+            A)B
+            A)C
+            B)X
+            C)Y
+            "#,
+        );
+        assert_eq!(number_of_transfers("X", "Y", Rc::clone(&tree)), 2);
     }
 }
