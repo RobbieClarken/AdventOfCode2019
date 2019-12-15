@@ -1,6 +1,7 @@
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::collections::VecDeque;
+use std::fs::File;
 use std::io::Read;
 
 const MEMORY: usize = 10_000;
@@ -60,12 +61,12 @@ impl Computer {
         }
     }
 
-    pub fn load_from_file<R>(file: &mut R) -> Self
-    where
-        R: Read,
-    {
+    pub fn load_from_file(path: &str) -> Self {
         let mut program = String::new();
-        file.read_to_string(&mut program).unwrap();
+        File::open(path)
+            .unwrap()
+            .read_to_string(&mut program)
+            .unwrap();
         let program = program
             .trim()
             .split(',')
@@ -217,11 +218,17 @@ impl Computer {
 #[cfg(test)]
 mod computer_tests {
     use super::*;
+    use std::env::temp_dir;
+    use std::io::Write;
 
     #[test]
     fn loads_from_file() {
-        let mut file: &[u8] = b"104,123,99\n";
-        let (out, complete) = Computer::load_from_file(&mut file).run(vec![]);
+        let mut path = temp_dir();
+        path.push("intcode_computer_loads_from_file.txt");
+        let mut file = File::create(&path).unwrap();
+        file.write_all(b"104,123,99\n").unwrap();
+        let path = path.to_str().unwrap();
+        let (out, complete) = Computer::load_from_file(path).run(vec![]);
         assert_eq!(out, vec![123]);
         assert_eq!(complete, true);
     }
