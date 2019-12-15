@@ -1,6 +1,7 @@
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::collections::VecDeque;
+use std::io::Read;
 
 const MEMORY: usize = 10_000;
 
@@ -59,6 +60,20 @@ impl Computer {
         }
     }
 
+    pub fn load_from_file<R>(file: &mut R) -> Self
+    where
+        R: Read,
+    {
+        let mut program = String::new();
+        file.read_to_string(&mut program).unwrap();
+        let program = program
+            .trim()
+            .split(',')
+            .map(|s| s.parse::<i64>().unwrap())
+            .collect();
+        Self::load(program)
+    }
+
     pub fn run(&mut self, input: Vec<i64>) -> (Vec<i64>, bool) {
         self.input = input.into();
         self.output = Vec::new();
@@ -104,7 +119,6 @@ impl Computer {
         let mode_gen = ModeGenerator { val: val / 100 };
         let opcode = FromPrimitive::from_i64(opcode)
             .unwrap_or_else(|| panic!("unexpected opcode: {}", opcode));
-        println!("{:?}", &opcode);
         (opcode, mode_gen)
     }
 
@@ -194,6 +208,14 @@ impl Computer {
 #[cfg(test)]
 mod computer_tests {
     use super::*;
+
+    #[test]
+    fn loads_from_file() {
+        let mut file: &[u8] = b"104,123,99\n";
+        let (out, complete) = Computer::load_from_file(&mut file).run(vec![]);
+        assert_eq!(out, vec![123]);
+        assert_eq!(complete, true);
+    }
 
     #[test]
     fn performs_addition() {
@@ -574,5 +596,18 @@ mod computer_tests {
         assert_eq!(Computer::load(program.clone()).run(vec![7]).0, vec![999]);
         assert_eq!(Computer::load(program.clone()).run(vec![8]).0, vec![1000]);
         assert_eq!(Computer::load(program.clone()).run(vec![9]).0, vec![1001]);
+
+        let program = vec![
+            109, 1, 204, -1, 1001, 100, 1, 100, 1008, 100, 16, 101, 1006, 101, 0, 99,
+        ];
+        assert_eq!(
+            Computer::load(program.clone()).run(vec![]).0,
+            program.clone()
+        );
+
+        let out = Computer::load(vec![1102, 34915192, 34915192, 7, 4, 7, 99, 0])
+            .run(vec![])
+            .0;
+        assert_eq!(out[0], 1_219_070_632_396_864);
     }
 }
