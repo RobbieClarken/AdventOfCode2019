@@ -70,7 +70,7 @@ impl Computer {
         let program = program
             .trim()
             .split(',')
-            .map(|s| s.parse::<i64>().unwrap())
+            .map(|s| s.parse().unwrap())
             .collect();
         Self::load(program)
     }
