@@ -84,8 +84,8 @@ impl Computer {
                 (Opcode::Halt, _) => {
                     break true;
                 }
-                (Opcode::Input, _) => {
-                    if !self.op_input() {
+                (Opcode::Input, mg) => {
+                    if !self.op_input(mg) {
                         self.pos = start_pos;
                         break false;
                     }
@@ -131,12 +131,21 @@ impl Computer {
         }
     }
 
-    fn op_input(&mut self) -> bool {
+    fn read_dest_addr(&mut self, mode_gen: &mut ModeGenerator) -> usize {
+        let v = self.read();
+        match mode_gen.next() {
+            Mode::Position => v as usize,
+            Mode::Relative => (self.relative_base + v) as usize,
+            Mode::Immediate => unreachable!(),
+        }
+    }
+
+    fn op_input(&mut self, mut mode_gen: ModeGenerator) -> bool {
         if self.input.is_empty() {
             return false;
         }
-        let out_addr = self.read() as usize;
-        self.program[out_addr] = self.input.pop_front().expect("insufficient input values");
+        let dest_addr = self.read_dest_addr(&mut mode_gen);
+        self.program[dest_addr] = self.input.pop_front().unwrap();
         true
     }
 
@@ -182,8 +191,8 @@ impl Computer {
     {
         let v1 = self.read_param(&mut mode_gen);
         let v2 = self.read_param(&mut mode_gen);
-        let dest = self.read() as usize;
-        self.program[dest] = if test(v1, v2) { 1 } else { 0 };
+        let dest_addr = self.read_dest_addr(&mut mode_gen);
+        self.program[dest_addr] = if test(v1, v2) { 1 } else { 0 };
     }
 
     fn op_add(&mut self, mut mode_gen: ModeGenerator) {
@@ -200,8 +209,8 @@ impl Computer {
     {
         let param1 = self.read_param(mode_gen);
         let param2 = self.read_param(mode_gen);
-        let output_address = self.read() as usize;
-        self.program[output_address] = op(param1, param2);
+        let dest_addr = self.read_dest_addr(mode_gen);
+        self.program[dest_addr] = op(param1, param2);
     }
 }
 
@@ -382,37 +391,37 @@ mod computer_tests {
     #[test]
     fn handles_less_than() {
         let program: Vec<i64> = vec![
-            111_07, // 0: less-than
-            101,    // 1: 101
-            102,    // 2: 102
-            0,      // 3: addr 0
-            4,      // 4: output
-            0,      // 5: addr 0 (value = 1)
-            99,     // 6: halt
+            11_07, // 0: less-than
+            101,   // 1: 101
+            102,   // 2: 102
+            0,     // 3: addr 0
+            4,     // 4: output
+            0,     // 5: addr 0 (value = 1)
+            99,    // 6: halt
         ];
         let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![1]);
 
         let program: Vec<i64> = vec![
-            111_07, // 0: less-than
-            102,    // 1: 102
-            101,    // 2: 101
-            0,      // 3: addr 0
-            4,      // 4: output
-            0,      // 5: addr 0 (value = 0)
-            99,     // 6: halt
+            11_07, // 0: less-than
+            102,   // 1: 102
+            101,   // 2: 101
+            0,     // 3: addr 0
+            4,     // 4: output
+            0,     // 5: addr 0 (value = 0)
+            99,    // 6: halt
         ];
         let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![0]);
 
         let program: Vec<i64> = vec![
-            111_07, // 0: less-than
-            101,    // 1: 101
-            101,    // 2: 101
-            0,      // 3: addr 0
-            4,      // 4: output
-            0,      // 5: addr 0 (value = 0)
-            99,     // 6: halt
+            11_07, // 0: less-than
+            101,   // 1: 101
+            101,   // 2: 101
+            0,     // 3: addr 0
+            4,     // 4: output
+            0,     // 5: addr 0 (value = 0)
+            99,    // 6: halt
         ];
         let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![0]);
@@ -421,25 +430,25 @@ mod computer_tests {
     #[test]
     fn handles_equals() {
         let program: Vec<i64> = vec![
-            111_08, // 0: equals
-            101,    // 1: 101
-            101,    // 2: 101
-            0,      // 3: addr 0
-            4,      // 4: output
-            0,      // 5: addr 0 (value = 1)
-            99,     // 6: halt
+            11_08, // 0: equals
+            101,   // 1: 101
+            101,   // 2: 101
+            0,     // 3: addr 0
+            4,     // 4: output
+            0,     // 5: addr 0 (value = 1)
+            99,    // 6: halt
         ];
         let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![1]);
 
         let program: Vec<i64> = vec![
-            111_08, // 0: equals
-            101,    // 1: 101
-            102,    // 2: 102
-            0,      // 3: addr 0
-            4,      // 4: output
-            0,      // 5: addr 0 (value = 0)
-            99,     // 6: halt
+            11_08, // 0: equals
+            101,   // 1: 101
+            102,   // 2: 102
+            0,     // 3: addr 0
+            4,     // 4: output
+            0,     // 5: addr 0 (value = 0)
+            99,    // 6: halt
         ];
         let (out, _) = Computer::load(program).run(vec![]);
         assert_eq!(out, vec![0]);
@@ -472,7 +481,7 @@ mod computer_tests {
     #[test]
     fn handles_relative_mode() {
         let program: Vec<i64> = vec![
-            204, // 0: output using relative base
+            204, // 0: output using relative mode
             3,   // 1: relative base + 3 = addr 3 = 101
             99,  // 2: halt
             101, // 3
@@ -494,6 +503,55 @@ mod computer_tests {
             333, // 11
         ];
         assert_eq!(Computer::load(program).run(vec![]).0, vec![111, 222]);
+    }
+
+    #[test]
+    fn handles_relative_mode_for_input_opcode() {
+        let program: Vec<i64> = vec![
+            109, // 0: adjust relative base
+            6,   // 1: ... to 0 + 6 = 6
+            203, // 2: input using relative mode
+            1,   // 3: relative base + 1 = @7
+            4,   // 4: ouput
+            7,   // 5: @7
+            99,  // 6: halt
+            0,   // 7
+        ];
+        assert_eq!(Computer::load(program).run(vec![123]).0, vec![123]);
+    }
+
+    #[test]
+    fn handles_relative_mode_for_binary_operation_output_address() {
+        let program: Vec<i64> = vec![
+            109,   // 0: adjust relative base
+            8,     // 1: ... to 0 + 8 = 8
+            21101, // 2: add (immediate, immediate, relative)
+            2,     // 3: 2
+            3,     // 4: 3
+            1,     // 5: relative base @8 + 1 = @9
+            4,     // 6: ouput
+            9,     // 7: @9
+            99,    // 8: halt
+            0,     // 9
+        ];
+        assert_eq!(Computer::load(program).run(vec![]).0, vec![5]);
+    }
+
+    #[test]
+    fn handles_relative_mode_for_comparison_opcodes() {
+        let program: Vec<i64> = vec![
+            109,    // 0: adjust relative base
+            8,      // 1: ... to 0 + 8 = 8
+            211_07, // 2: less-than
+            101,    // 3: 101
+            102,    // 4: 102
+            1,      // 5: relative base @8 + 1 = @9
+            4,      // 6: ouput
+            9,      // 7: @9
+            99,     // 8: halt
+            0,      // 9
+        ];
+        assert_eq!(Computer::load(program).run(vec![]).0, vec![1]);
     }
 
     #[test]
