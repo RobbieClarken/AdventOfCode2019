@@ -13,12 +13,14 @@ enum Opcode {
     JumpIfFalse = 6,
     LessThan = 7,
     Equals = 8,
+    AdjustRelativeBase = 9,
 }
 
 #[derive(FromPrimitive)]
 enum Mode {
     Position = 0,
     Immediate = 1,
+    Relative = 2,
 }
 
 struct ModeGenerator {
@@ -38,6 +40,7 @@ pub struct Computer {
     input: VecDeque<i32>,
     output: Vec<i32>,
     pos: usize,
+    relative_base: i32,
 }
 
 impl Computer {
@@ -47,6 +50,7 @@ impl Computer {
             input: VecDeque::new(),
             pos: 0,
             output: Vec::new(),
+            relative_base: 0,
         }
     }
 
@@ -67,6 +71,7 @@ impl Computer {
                     }
                 }
                 (Opcode::Output, mg) => self.op_output(mg),
+                (Opcode::AdjustRelativeBase, mg) => self.op_adjust_relative_base(mg),
                 (Opcode::Add, mg) => self.op_add(mg),
                 (Opcode::Multiply, mg) => self.op_multiply(mg),
                 (Opcode::JumpIfTrue, mg) => self.op_jump_if_true(mg),
@@ -94,11 +99,12 @@ impl Computer {
     }
 
     fn read_param(&mut self, mode_gen: &mut ModeGenerator) -> i32 {
-        let mut v = self.read();
-        if let Mode::Position = mode_gen.next() {
-            v = self.program[v as usize];
+        let v = self.read();
+        match mode_gen.next() {
+            Mode::Position => self.program[v as usize],
+            Mode::Immediate => v,
+            Mode::Relative => self.program[(self.relative_base + v) as usize],
         }
-        v
     }
 
     fn op_input(&mut self) -> bool {
@@ -113,6 +119,10 @@ impl Computer {
     fn op_output(&mut self, mut mode_gen: ModeGenerator) {
         let v = self.read_param(&mut mode_gen);
         self.output.push(v)
+    }
+
+    fn op_adjust_relative_base(&mut self, mut mode_gen: ModeGenerator) {
+        self.relative_base += self.read_param(&mut mode_gen);
     }
 
     fn op_jump_if_true(&mut self, mode_gen: ModeGenerator) {
@@ -425,6 +435,33 @@ mod computer_tests {
         let (out, complete) = computer.run(vec![102]);
         assert_eq!(out, vec![102]);
         assert_eq!(complete, true);
+    }
+
+    #[test]
+    fn handles_relative_mode() {
+        let program: Vec<i32> = vec![
+            204, // 0: output using relative base
+            3,   // 1: relative base + 3 = addr 3 = 101
+            99,  // 2: halt
+            101, // 3
+        ];
+        assert_eq!(Computer::load(program).run(vec![]).0, vec![101]);
+
+        let program: Vec<i32> = vec![
+            109, // 0: adjust relative base
+            8,   // 1: ... to 0 + 8 = 8
+            204, // 2: output using relative base
+            1,   // 3: relative base + 1 = addr 9 = 111
+            109, // 4: adjust relative base
+            3,   // 5: ... to 8 + 3 = 11
+            204, // 6: output using relative base
+            -1,  // 7: relative base - 1 = addr 10 = 222
+            99,  // 8: halt
+            111, // 9
+            222, // 10
+            333, // 11
+        ];
+        assert_eq!(Computer::load(program).run(vec![]).0, vec![111, 222]);
     }
 
     #[test]
