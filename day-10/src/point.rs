@@ -8,6 +8,14 @@ impl Point {
         Self(x, y)
     }
 
+    pub fn x(self) -> i32 {
+        self.0
+    }
+
+    pub fn y(self) -> i32 {
+        self.1
+    }
+
     pub fn get_to(self, other: Self) -> (Self, i32) {
         let step = other - self;
         let common_divisor = gcd(step.0, step.1);

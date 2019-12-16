@@ -8,6 +8,7 @@ use std::io::Read;
 fn main() {
     let input = read_input();
     challenge_1(&input);
+    challenge_2(&input);
 }
 
 fn read_input() -> String {
@@ -20,14 +21,25 @@ fn read_input() -> String {
 }
 
 fn challenge_1(input: &str) {
-    let max_visible = num_visible_at_best_location(&input);
+    let (_, max_visible) = find_best_location(&input);
     println!(
         "Challenge 1: Num visible at best location = {}",
         max_visible
     );
 }
 
-fn num_visible_at_best_location(map: &str) -> u32 {
+fn challenge_2(input: &str) {
+    let locations = extract_locations(input);
+    let (best_loc, _) = find_max_visible(&locations);
+    let vaporizations = predict_vaporizations(&locations, best_loc);
+    let satellite = vaporizations[199];
+    println!(
+        "Challenge 2: Answer = {}",
+        satellite.x() * 100 + satellite.y()
+    );
+}
+
+fn find_best_location(map: &str) -> (Point, u32) {
     let locations = extract_locations(map);
     find_max_visible(&locations)
 }
@@ -49,15 +61,17 @@ fn extract_locations(map: &str) -> Vec<Point> {
     locations
 }
 
-fn find_max_visible(locations: &[Point]) -> u32 {
+fn find_max_visible(locations: &[Point]) -> (Point, u32) {
+    let mut best_loc: Option<Point> = None;
     let mut max_visible = 0;
     for loc in locations {
         let visible = count_visible_from_loc(locations, *loc);
-        if visible > max_visible {
+        if best_loc.is_none() || visible > max_visible {
+            best_loc = Some(*loc);
             max_visible = visible;
         }
     }
-    max_visible
+    (best_loc.unwrap(), max_visible)
 }
 
 fn count_visible_from_loc(locations: &[Point], loc: Point) -> u32 {
@@ -78,7 +92,6 @@ fn count_visible_from_loc(locations: &[Point], loc: Point) -> u32 {
     visible
 }
 
-#[allow(dead_code)]
 fn satellites_by_direction(locations: &[Point], origin: Point) -> HashMap<Point, Vec<Point>> {
     let mut out: HashMap<Point, Vec<Point>> = Default::default();
     for loc in locations {
@@ -95,7 +108,6 @@ fn satellites_by_direction(locations: &[Point], origin: Point) -> HashMap<Point,
     out
 }
 
-#[allow(dead_code)]
 fn predict_vaporizations(locations: &[Point], origin: Point) -> Vec<Point> {
     let mut by_direction = satellites_by_direction(locations, origin);
     let mut directions: Vec<Point> = by_direction.keys().copied().collect();
@@ -119,12 +131,12 @@ mod day_10_tests {
 
     #[test]
     fn finds_num_visible_at_best_location_for_single_asteroid() {
-        assert_eq!(num_visible_at_best_location("#"), 0);
+        assert_eq!(find_best_location("#"), (Point::new(0, 0), 0));
     }
 
     #[test]
     fn finds_num_visible_at_best_location_for_two_asteroids() {
-        assert_eq!(num_visible_at_best_location("##"), 1);
+        assert_eq!(find_best_location("##"), (Point::new(0, 0), 1));
     }
 
     #[test]
@@ -141,7 +153,7 @@ mod day_10_tests {
 ##...#..#.
 .#....####
 "#;
-        assert_eq!(num_visible_at_best_location(map), 33);
+        assert_eq!(find_best_location(map), (Point::new(5, 8), 33));
 
         let map = r#"
 #.#...#.#.
@@ -155,7 +167,7 @@ mod day_10_tests {
 ......#...
 .####.###.
 "#;
-        assert_eq!(num_visible_at_best_location(map), 35);
+        assert_eq!(find_best_location(map), (Point::new(1, 2), 35));
 
         let map = r#"
 .#..#..###
@@ -169,7 +181,7 @@ mod day_10_tests {
 .##...##.#
 .....#.#..
 "#;
-        assert_eq!(num_visible_at_best_location(map), 41);
+        assert_eq!(find_best_location(map), (Point::new(6, 3), 41));
 
         let map = r#"
 .#..##.###...#######
@@ -193,7 +205,7 @@ mod day_10_tests {
 #.#.#.#####.####.###
 ###.##.####.##.#..##
 "#;
-        assert_eq!(num_visible_at_best_location(map), 210);
+        assert_eq!(find_best_location(map), (Point::new(11, 13), 210));
     }
 
     fn build_dir_to_point_map(data: &[((i32, i32), &[(i32, i32)])]) -> HashMap<Point, Vec<Point>> {
