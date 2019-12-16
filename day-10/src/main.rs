@@ -1,3 +1,6 @@
+mod point;
+
+use point::Point;
 use std::fs::File;
 use std::io::Read;
 
@@ -23,24 +26,24 @@ fn num_visible_at_best_location(map: &str) -> u32 {
     find_max_visible(&locations)
 }
 
-fn extract_locations(map: &str) -> Vec<(i32, i32)> {
+fn extract_locations(map: &str) -> Vec<Point> {
     let map: Vec<Vec<char>> = map
         .trim()
         .split('\n')
         .map(|s| s.chars().collect())
         .collect();
-    let mut locations: Vec<(i32, i32)> = Default::default();
+    let mut locations: Vec<Point> = Default::default();
     for (y, row) in map.iter().enumerate() {
         for (x, c) in row.iter().enumerate() {
             if *c == '#' {
-                locations.push((x as i32, y as i32));
+                locations.push(Point::new(x as i32, y as i32));
             }
         }
     }
     locations
 }
 
-fn find_max_visible(locations: &[(i32, i32)]) -> u32 {
+fn find_max_visible(locations: &[Point]) -> u32 {
     let mut max_visible = 0;
     for loc in locations {
         let visible = count_visible_from_loc(locations, *loc);
@@ -51,44 +54,22 @@ fn find_max_visible(locations: &[(i32, i32)]) -> u32 {
     max_visible
 }
 
-fn count_visible_from_loc(locations: &[(i32, i32)], loc: (i32, i32)) -> u32 {
-    let (x0, y0) = loc;
+fn count_visible_from_loc(locations: &[Point], loc: Point) -> u32 {
     let mut visible = 0;
     'outer: for other in locations {
         if *other == loc {
             continue;
         }
-        let (x1, y1) = other;
-        let x_step = x1 - x0;
-        let y_step = y1 - y0;
-        let common_divisor = gcd(x_step, y_step);
-        if common_divisor == 1 {
-            visible += 1;
-            continue;
-        }
-        let x_unit = x_step / common_divisor;
-        let y_unit = y_step / common_divisor;
-        for n in 1..common_divisor {
-            let x_between = x0 + n as i32 * x_unit;
-            let y_between = y0 + n as i32 * y_unit;
-            if locations.contains(&(x_between, y_between)) {
+        let (direction, multiples) = loc.get_to(*other);
+        for n in 1..multiples {
+            let loc_between = loc + direction * n;
+            if locations.contains(&loc_between) {
                 continue 'outer;
             }
         }
         visible += 1;
     }
     visible
-}
-
-fn gcd(x: i32, y: i32) -> i32 {
-    let mut x = x;
-    let mut y = y;
-    while y != 0 {
-        let t = y;
-        y = x % y;
-        x = t;
-    }
-    x.abs()
 }
 
 #[cfg(test)]
