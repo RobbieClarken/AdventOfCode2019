@@ -1,8 +1,6 @@
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::collections::VecDeque;
-use std::fs::File;
-use std::io::Read;
 
 const MEMORY: usize = 10_000;
 
@@ -62,12 +60,8 @@ impl Computer {
     }
 
     pub fn load_from_file(path: &str) -> Self {
-        let mut program = String::new();
-        File::open(path)
+        let program = std::fs::read_to_string(path)
             .unwrap()
-            .read_to_string(&mut program)
-            .unwrap();
-        let program = program
             .trim()
             .split(',')
             .map(|s| s.parse().unwrap())
@@ -219,6 +213,7 @@ impl Computer {
 mod computer_tests {
     use super::*;
     use std::env::temp_dir;
+    use std::fs::File;
     use std::io::Write;
 
     #[test]
