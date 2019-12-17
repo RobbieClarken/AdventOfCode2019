@@ -11,27 +11,29 @@ fn main() {
     benchmark(&system);
 }
 
-fn benchmark(system: &[Moon]) {
+fn benchmark(system: &System) {
     let mut system = system.to_owned();
-    for _ in 0..3 {
-        let t0 = Instant::now();
-        apply_steps(&mut system, 1_000_000);
-        println!("{}", t0.elapsed().as_millis());
-    }
+    let t0 = Instant::now();
+    apply_steps(&mut system, 100_000_000);
+    println!("{}", t0.elapsed().as_millis());
+    println!("{:?}", system);
 }
 
-fn challenge_1(system: &[Moon]) {
+fn challenge_1(system: &System) {
     let mut system = system.to_owned();
     apply_steps(&mut system, 1000);
     let energy = total_energy(&system);
     println!("Challenge 1: Total energy after 1000 steps = {}", energy);
 }
 
-fn challenge_2(system: &[Moon]) {
+fn challenge_2(system: &System) {
     let mut system = system.to_owned();
     let steps = steps_until_repeat(&mut system);
     println!("Challenge 2: Steps before system repeats = {}", steps);
 }
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+struct System(Moon, Moon, Moon, Moon);
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Moon {
@@ -55,12 +57,23 @@ impl Moon {
         }
     }
 
-    fn step(&mut self, system: &[Moon]) {
-        for other in system {
-            self.vx += (other.x - self.x).signum();
-            self.vy += (other.y - self.y).signum();
-            self.vz += (other.z - self.z).signum();
-        }
+    fn step(&mut self, system: &System) {
+        let m1 = system.0;
+        let m2 = system.1;
+        let m3 = system.2;
+        let m4 = system.3;
+        self.vx += (m1.x - self.x).signum()
+            + (m2.x - self.x).signum()
+            + (m3.x - self.x).signum()
+            + (m4.x - self.x).signum();
+        self.vy += (m1.y - self.y).signum()
+            + (m2.y - self.y).signum()
+            + (m3.y - self.y).signum()
+            + (m4.y - self.y).signum();
+        self.vz += (m1.z - self.z).signum()
+            + (m2.z - self.z).signum()
+            + (m3.z - self.z).signum()
+            + (m4.z - self.z).signum();
         self.x += self.vx;
         self.y += self.vy;
         self.z += self.vz;
@@ -84,8 +97,9 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'_> {
-    fn parse(input: &str) -> Vec<Moon> {
-        input.trim().lines().map(Parser::parse_one).collect()
+    fn parse(input: &str) -> System {
+        let moons: Vec<Moon> = input.trim().lines().map(Parser::parse_one).collect();
+        System(moons[0], moons[1], moons[2], moons[3])
     }
 
     fn parse_one(line: &str) -> Moon {
@@ -117,32 +131,34 @@ impl<'a> Parser<'_> {
     }
 }
 
-fn step(system: &mut Vec<Moon>) {
-    let init_system = system.clone();
-    for moon in system.iter_mut() {
-        moon.step(&init_system);
-    }
+fn step(system: &mut System) {
+    let init_system = *system;
+    system.0.step(&init_system);
+    system.1.step(&init_system);
+    system.2.step(&init_system);
+    system.3.step(&init_system);
 }
 
-fn apply_steps(mut system: &mut Vec<Moon>, number_of_steps: u32) {
+fn apply_steps(mut system: &mut System, number_of_steps: u32) {
     for _ in 0..number_of_steps {
         step(&mut system);
     }
 }
 
-fn total_energy(system: &[Moon]) -> i32 {
+fn total_energy(system: &System) -> i32 {
     let mut energy = 0;
-    for moon in system {
-        energy += moon.energy();
-    }
+    energy += system.0.energy();
+    energy += system.1.energy();
+    energy += system.2.energy();
+    energy += system.3.energy();
     energy
 }
 
-fn steps_until_repeat(mut system: &mut Vec<Moon>) -> u64 {
-    let mut seen: HashSet<Vec<Moon>> = Default::default();
+fn steps_until_repeat(mut system: &mut System) -> u64 {
+    let mut seen: HashSet<System> = Default::default();
     let mut steps = 0;
     loop {
-        if !seen.insert((&system).to_vec()) {
+        if !seen.insert(*system) {
             break;
         }
         steps += 1;
@@ -166,12 +182,12 @@ mod test_day_12 {
         let system = Parser::parse(&input);
         assert_eq!(
             system,
-            vec![
+            System(
                 Moon::new(2, -1, 1, 3, -1, -1),
                 Moon::new(3, -7, -4, 1, 3, 3),
                 Moon::new(1, -7, 5, -3, 1, -3),
                 Moon::new(2, 2, 0, -1, -3, 1),
-            ]
+            ),
         );
     }
 
@@ -186,12 +202,12 @@ mod test_day_12 {
         let system = Parser::parse(&input);
         assert_eq!(
             system,
-            vec![
+            System(
                 Moon::new(-1, 0, 2, 0, 0, 0),
                 Moon::new(2, -10, -7, 0, 0, 0),
                 Moon::new(4, -8, 8, 0, 0, 0),
                 Moon::new(3, 5, -1, 0, 0, 0),
-            ]
+            )
         );
     }
 
@@ -462,6 +478,6 @@ mod test_day_12 {
     //             ",
     //     );
     //     let steps = steps_until_repeat(&mut system);
-    //     assert_eq!(steps, 4686774924);
+    //     assert_eq!(steps, 4_686_774_924);
     // }
 }
