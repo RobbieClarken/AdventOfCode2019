@@ -1,19 +1,39 @@
+#![allow(dead_code)]
 use regex::{Captures, Regex};
-use std::cmp::Ordering::*;
+use std::collections::HashSet;
+use std::time::Instant;
 
 fn main() {
-    challenge_1();
+    let input = std::fs::read_to_string("input").unwrap();
+    let system = Parser::parse(&input);
+    // challenge_1(&system);
+    // challenge_2(&system);
+    benchmark(&system);
 }
 
-fn challenge_1() {
-    let input = std::fs::read_to_string("input").unwrap();
-    let mut system = Parser::parse(&input);
+fn benchmark(system: &[Moon]) {
+    let mut system = system.to_owned();
+    for _ in 0..3 {
+        let t0 = Instant::now();
+        apply_steps(&mut system, 1_000_000);
+        println!("{}", t0.elapsed().as_millis());
+    }
+}
+
+fn challenge_1(system: &[Moon]) {
+    let mut system = system.to_owned();
     apply_steps(&mut system, 1000);
     let energy = total_energy(&system);
     println!("Challenge 1: Total energy after 1000 steps = {}", energy);
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+fn challenge_2(system: &[Moon]) {
+    let mut system = system.to_owned();
+    let steps = steps_until_repeat(&mut system);
+    println!("Challenge 2: Steps before system repeats = {}", steps);
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Moon {
     x: i32,
     y: i32,
@@ -37,21 +57,13 @@ impl Moon {
 
     fn step(&mut self, system: &[Moon]) {
         for other in system {
-            self.vx += Moon::velocity_step(self.x, other.x);
-            self.vy += Moon::velocity_step(self.y, other.y);
-            self.vz += Moon::velocity_step(self.z, other.z);
+            self.vx += (other.x - self.x).signum();
+            self.vy += (other.y - self.y).signum();
+            self.vz += (other.z - self.z).signum();
         }
         self.x += self.vx;
         self.y += self.vy;
         self.z += self.vz;
-    }
-
-    fn velocity_step(self_p: i32, other_p: i32) -> i32 {
-        match other_p.cmp(&self_p) {
-            Greater => 1,
-            Less => -1,
-            Equal => 0,
-        }
     }
 
     fn energy(&self) -> i32 {
@@ -124,6 +136,19 @@ fn total_energy(system: &[Moon]) -> i32 {
         energy += moon.energy();
     }
     energy
+}
+
+fn steps_until_repeat(mut system: &mut Vec<Moon>) -> u64 {
+    let mut seen: HashSet<Vec<Moon>> = Default::default();
+    let mut steps = 0;
+    loop {
+        if !seen.insert((&system).to_vec()) {
+            break;
+        }
+        steps += 1;
+        step(&mut system);
+    }
+    steps
 }
 
 #[cfg(test)]
@@ -411,4 +436,32 @@ mod test_day_12 {
 
         assert_eq!(total_energy(&system), 1940);
     }
+
+    #[test]
+    fn calculates_steps_until_repeat() {
+        let mut system = Parser::parse(
+            r"
+            <x=-1, y=0, z=2>
+            <x=2, y=-10, z=-7>
+            <x=4, y=-8, z=8>
+            <x=3, y=5, z=-1>
+            ",
+        );
+        let steps = steps_until_repeat(&mut system);
+        assert_eq!(steps, 2772);
+    }
+
+    // #[test]
+    // fn calculates_steps_until_repeat_for_system_that_takes_long_time() {
+    //     let mut system = Parser::parse(
+    //         r"
+    //             <x=-8, y=-10, z=0>
+    //             <x=5, y=5, z=10>
+    //             <x=2, y=-7, z=3>
+    //             <x=9, y=-8, z=-3>
+    //             ",
+    //     );
+    //     let steps = steps_until_repeat(&mut system);
+    //     assert_eq!(steps, 4686774924);
+    // }
 }
