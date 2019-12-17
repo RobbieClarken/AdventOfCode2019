@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use regex::{Captures, Regex};
 use std::collections::HashSet;
 use std::time::Instant;
@@ -6,89 +5,135 @@ use std::time::Instant;
 fn main() {
     let input = std::fs::read_to_string("input").unwrap();
     let system = Parser::parse(&input);
-    // challenge_1(&system);
-    // challenge_2(&system);
-    benchmark(&system);
+    challenge_1(&system);
+    challenge_2(&system);
+    // benchmark(&system);
 }
 
+#[allow(dead_code)]
 fn benchmark(system: &System) {
     let mut system = system.to_owned();
     let t0 = Instant::now();
-    apply_steps(&mut system, 100_000_000);
+    system.apply_steps(100_000_000);
     println!("{}", t0.elapsed().as_millis());
     println!("{:?}", system);
 }
 
 fn challenge_1(system: &System) {
     let mut system = system.to_owned();
-    apply_steps(&mut system, 1000);
-    let energy = total_energy(&system);
-    println!("Challenge 1: Total energy after 1000 steps = {}", energy);
+    system.apply_steps(1000);
+    println!(
+        "Challenge 1: Total energy after 1000 steps = {}",
+        system.energy()
+    );
 }
 
 fn challenge_2(system: &System) {
-    let mut system = system.to_owned();
-    let steps = steps_until_repeat(&mut system);
-    println!("Challenge 2: Steps before system repeats = {}", steps);
+    println!(
+        "Challenge 2: Steps before system repeats = {}",
+        system.steps_until_repeat()
+    );
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-struct System(Moon, Moon, Moon, Moon);
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-struct Moon {
-    x: i32,
-    y: i32,
-    z: i32,
-    vx: i32,
-    vy: i32,
-    vz: i32,
+struct System {
+    x: System1d,
+    y: System1d,
+    z: System1d,
 }
 
-impl Moon {
-    fn new(x: i32, y: i32, z: i32, vx: i32, vy: i32, vz: i32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            vx,
-            vy,
-            vz,
+impl System {
+    fn step(&mut self) {
+        self.x.step();
+        self.y.step();
+        self.z.step();
+    }
+
+    fn apply_steps(&mut self, number_of_steps: u32) {
+        for _ in 0..number_of_steps {
+            self.step();
         }
     }
 
-    fn step(&mut self, system: &System) {
+    fn steps_until_repeat(&self) -> u64 {
+        let x_steps = self.x.steps_until_repeat();
+        let y_steps = self.y.steps_until_repeat();
+        let z_steps = self.z.steps_until_repeat();
+        lcm(lcm(x_steps, y_steps), z_steps)
+    }
+
+    fn energy(&self) -> i32 {
+        let x = self.x;
+        let y = self.y;
+        let z = self.z;
+        let m1_energy = (x.0.potential_energy() + y.0.potential_energy() + z.0.potential_energy())
+            * (x.0.kinetic_energy() + y.0.kinetic_energy() + z.0.kinetic_energy());
+        let m2_energy = (x.1.potential_energy() + y.1.potential_energy() + z.1.potential_energy())
+            * (x.1.kinetic_energy() + y.1.kinetic_energy() + z.1.kinetic_energy());
+        let m3_energy = (x.2.potential_energy() + y.2.potential_energy() + z.2.potential_energy())
+            * (x.2.kinetic_energy() + y.2.kinetic_energy() + z.2.kinetic_energy());
+        let m4_energy = (x.3.potential_energy() + y.3.potential_energy() + z.3.potential_energy())
+            * (x.3.kinetic_energy() + y.3.kinetic_energy() + z.3.kinetic_energy());
+        m1_energy + m2_energy + m3_energy + m4_energy
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+struct System1d(Moon1d, Moon1d, Moon1d, Moon1d);
+
+impl System1d {
+    fn step(&mut self) {
+        let initial = *self;
+        self.0.step(&initial);
+        self.1.step(&initial);
+        self.2.step(&initial);
+        self.3.step(&initial);
+    }
+
+    fn steps_until_repeat(&self) -> u64 {
+        let mut system = *self;
+        let mut seen: HashSet<System1d> = Default::default();
+        let mut steps = 0;
+        loop {
+            if !seen.insert(system) {
+                break;
+            }
+            steps += 1;
+            system.step();
+        }
+        steps
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+struct Moon1d {
+    p: i32,
+    v: i32,
+}
+
+impl Moon1d {
+    fn new(p: i32, v: i32) -> Self {
+        Self { p, v }
+    }
+
+    fn step(&mut self, system: &System1d) {
         let m1 = system.0;
         let m2 = system.1;
         let m3 = system.2;
         let m4 = system.3;
-        self.vx += (m1.x - self.x).signum()
-            + (m2.x - self.x).signum()
-            + (m3.x - self.x).signum()
-            + (m4.x - self.x).signum();
-        self.vy += (m1.y - self.y).signum()
-            + (m2.y - self.y).signum()
-            + (m3.y - self.y).signum()
-            + (m4.y - self.y).signum();
-        self.vz += (m1.z - self.z).signum()
-            + (m2.z - self.z).signum()
-            + (m3.z - self.z).signum()
-            + (m4.z - self.z).signum();
-        self.x += self.vx;
-        self.y += self.vy;
-        self.z += self.vz;
+        self.v += (m1.p - self.p).signum()
+            + (m2.p - self.p).signum()
+            + (m3.p - self.p).signum()
+            + (m4.p - self.p).signum();
+        self.p += self.v;
     }
 
-    fn energy(&self) -> i32 {
-        self.potential_energy() * self.kinetic_energy()
+    fn potential_energy(self) -> i32 {
+        self.p.abs()
     }
 
-    fn potential_energy(&self) -> i32 {
-        self.x.abs() + self.y.abs() + self.z.abs()
-    }
-
-    fn kinetic_energy(&self) -> i32 {
-        self.vx.abs() + self.vy.abs() + self.vz.abs()
+    fn kinetic_energy(self) -> i32 {
+        self.v.abs()
     }
 }
 
@@ -98,11 +143,15 @@ struct Parser<'a> {
 
 impl<'a> Parser<'_> {
     fn parse(input: &str) -> System {
-        let moons: Vec<Moon> = input.trim().lines().map(Parser::parse_one).collect();
-        System(moons[0], moons[1], moons[2], moons[3])
+        let moons: Vec<_> = input.trim().lines().map(Parser::parse_one).collect();
+        System {
+            x: System1d(moons[0].0, moons[1].0, moons[2].0, moons[3].0),
+            y: System1d(moons[0].1, moons[1].1, moons[2].1, moons[3].1),
+            z: System1d(moons[0].2, moons[1].2, moons[2].2, moons[3].2),
+        }
     }
 
-    fn parse_one(line: &str) -> Moon {
+    fn parse_one(line: &str) -> (Moon1d, Moon1d, Moon1d) {
         let full_regex = Regex::new(concat!(
             r"pos=<x=(?P<x>[^,]+), y=(?P<y>[^,]+), z=(?P<z>[^>]+)>.*",
             r"vel=<x=(?P<vx>[^,]+), y=(?P<vy>[^,]+), z=(?P<vz>[^>]+)>"
@@ -114,14 +163,10 @@ impl<'a> Parser<'_> {
             .captures(line)
             .unwrap_or_else(|| pos_only_regex.captures(line).unwrap());
         let p = Parser { captures };
-        Moon::new(
-            p.get("x").unwrap(),
-            p.get("y").unwrap(),
-            p.get("z").unwrap(),
-            p.get("vx").unwrap_or(0),
-            p.get("vy").unwrap_or(0),
-            p.get("vz").unwrap_or(0),
-        )
+        let m1 = Moon1d::new(p.get("x").unwrap(), p.get("vx").unwrap_or(0));
+        let m2 = Moon1d::new(p.get("y").unwrap(), p.get("vy").unwrap_or(0));
+        let m3 = Moon1d::new(p.get("z").unwrap(), p.get("vz").unwrap_or(0));
+        (m1, m2, m3)
     }
 
     fn get(&self, name: &str) -> Option<i32> {
@@ -131,85 +176,22 @@ impl<'a> Parser<'_> {
     }
 }
 
-fn step(system: &mut System) {
-    let init_system = *system;
-    system.0.step(&init_system);
-    system.1.step(&init_system);
-    system.2.step(&init_system);
-    system.3.step(&init_system);
+fn lcm(a: u64, b: u64) -> u64 {
+    a * b / gcd(a, b)
 }
 
-fn apply_steps(mut system: &mut System, number_of_steps: u32) {
-    for _ in 0..number_of_steps {
-        step(&mut system);
+fn gcd(mut x: u64, mut y: u64) -> u64 {
+    while y != 0 {
+        let t = y;
+        y = x % y;
+        x = t;
     }
-}
-
-fn total_energy(system: &System) -> i32 {
-    let mut energy = 0;
-    energy += system.0.energy();
-    energy += system.1.energy();
-    energy += system.2.energy();
-    energy += system.3.energy();
-    energy
-}
-
-fn steps_until_repeat(mut system: &mut System) -> u64 {
-    let mut seen: HashSet<System> = Default::default();
-    let mut steps = 0;
-    loop {
-        if !seen.insert(*system) {
-            break;
-        }
-        steps += 1;
-        step(&mut system);
-    }
-    steps
+    x
 }
 
 #[cfg(test)]
 mod test_day_12 {
     use super::*;
-
-    #[test]
-    fn parses_input_with_velocities() {
-        let input = r"
-            pos=<x= 2, y=-1, z= 1>, vel=<x= 3, y=-1, z=-1>
-            pos=<x= 3, y=-7, z=-4>, vel=<x= 1, y= 3, z= 3>
-            pos=<x= 1, y=-7, z= 5>, vel=<x=-3, y= 1, z=-3>
-            pos=<x= 2, y= 2, z= 0>, vel=<x=-1, y=-3, z= 1>
-        ";
-        let system = Parser::parse(&input);
-        assert_eq!(
-            system,
-            System(
-                Moon::new(2, -1, 1, 3, -1, -1),
-                Moon::new(3, -7, -4, 1, 3, 3),
-                Moon::new(1, -7, 5, -3, 1, -3),
-                Moon::new(2, 2, 0, -1, -3, 1),
-            ),
-        );
-    }
-
-    #[test]
-    fn parses_input_without_velocities() {
-        let input = r"
-            <x=-1, y=0, z=2>
-            <x=2, y=-10, z=-7>
-            <x=4, y=-8, z=8>
-            <x=3, y=5, z=-1>
-        ";
-        let system = Parser::parse(&input);
-        assert_eq!(
-            system,
-            System(
-                Moon::new(-1, 0, 2, 0, 0, 0),
-                Moon::new(2, -10, -7, 0, 0, 0),
-                Moon::new(4, -8, 8, 0, 0, 0),
-                Moon::new(3, 5, -1, 0, 0, 0),
-            )
-        );
-    }
 
     #[test]
     fn applies_time_step() {
@@ -222,7 +204,7 @@ mod test_day_12 {
             ",
         );
 
-        step(&mut system);
+        system.step();
         assert_eq!(
             system,
             Parser::parse(
@@ -235,7 +217,7 @@ mod test_day_12 {
             )
         );
 
-        step(&mut system);
+        system.step();
         assert_eq!(
             system,
             Parser::parse(
@@ -259,7 +241,7 @@ mod test_day_12 {
             pos=<x= 2, y= 0, z= 4>, vel=<x= 1, y=-1, z=-1>
             ",
         );
-        assert_eq!(total_energy(&system), 179);
+        assert_eq!(system.energy(), 179);
     }
 
     #[test]
@@ -272,7 +254,7 @@ mod test_day_12 {
             <x=3, y=5, z=-1>
             ",
         );
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -311,7 +293,7 @@ mod test_day_12 {
         );
 
         // After 10 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -325,7 +307,7 @@ mod test_day_12 {
         );
 
         // After 20 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -339,7 +321,7 @@ mod test_day_12 {
         );
 
         // After 30 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -353,7 +335,7 @@ mod test_day_12 {
         );
 
         // After 40 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -367,7 +349,7 @@ mod test_day_12 {
         );
 
         // After 50 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -381,7 +363,7 @@ mod test_day_12 {
         );
 
         // After 60 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -395,7 +377,7 @@ mod test_day_12 {
         );
 
         // After 70 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -409,7 +391,7 @@ mod test_day_12 {
         );
 
         // After 80 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -423,7 +405,7 @@ mod test_day_12 {
         );
 
         // After 90 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -437,7 +419,7 @@ mod test_day_12 {
         );
 
         // After 100 steps:
-        apply_steps(&mut system, 10);
+        system.apply_steps(10);
         assert_eq!(
             system,
             Parser::parse(
@@ -450,12 +432,12 @@ mod test_day_12 {
             )
         );
 
-        assert_eq!(total_energy(&system), 1940);
+        assert_eq!(system.energy(), 1940);
     }
 
     #[test]
     fn calculates_steps_until_repeat() {
-        let mut system = Parser::parse(
+        let system = Parser::parse(
             r"
             <x=-1, y=0, z=2>
             <x=2, y=-10, z=-7>
@@ -463,21 +445,19 @@ mod test_day_12 {
             <x=3, y=5, z=-1>
             ",
         );
-        let steps = steps_until_repeat(&mut system);
-        assert_eq!(steps, 2772);
+        assert_eq!(system.steps_until_repeat(), 2772);
     }
 
-    // #[test]
-    // fn calculates_steps_until_repeat_for_system_that_takes_long_time() {
-    //     let mut system = Parser::parse(
-    //         r"
-    //             <x=-8, y=-10, z=0>
-    //             <x=5, y=5, z=10>
-    //             <x=2, y=-7, z=3>
-    //             <x=9, y=-8, z=-3>
-    //             ",
-    //     );
-    //     let steps = steps_until_repeat(&mut system);
-    //     assert_eq!(steps, 4_686_774_924);
-    // }
+    #[test]
+    fn calculates_steps_until_repeat_for_system_that_takes_long_time() {
+        let system = Parser::parse(
+            r"
+                <x=-8, y=-10, z=0>
+                <x=5, y=5, z=10>
+                <x=2, y=-7, z=3>
+                <x=9, y=-8, z=-3>
+                ",
+        );
+        assert_eq!(system.steps_until_repeat(), 4_686_774_924);
+    }
 }
