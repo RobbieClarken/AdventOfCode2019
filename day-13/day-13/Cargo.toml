@@ -6,3 +6,5 @@ edition = "2018"
 
 [dependencies]
 intcode-computer = {path="../intcode-computer"}
+num-derive = "*"
+num-traits = "*"
