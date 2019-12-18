@@ -98,6 +98,10 @@ impl Computer {
         (self.output.clone(), completed)
     }
 
+    pub fn set_address(&mut self, address: usize, value: i64) {
+        self.program[address] = value;
+    }
+
     fn read(&mut self) -> i64 {
         let val = self.value_at(self.pos);
         self.pos += 1;
@@ -610,7 +614,7 @@ mod computer_tests {
     }
 
     #[test]
-    fn can_handle_large_numebrs() {
+    fn can_handle_large_numbers() {
         let program: Vec<i64> = vec![
             104,              // 0: output
             1125899906842624, // 1: value
@@ -669,5 +673,18 @@ mod computer_tests {
             .run(vec![])
             .0;
         assert_eq!(out[0], 1_219_070_632_396_864);
+    }
+
+    #[test]
+    fn allows_setting_address() {
+        let program: Vec<i64> = vec![
+            4,  // 0: output
+            3,  // 1: ... from @3
+            99, // 2: halt
+            0,  // 3
+        ];
+        let mut computer = Computer::load(program);
+        computer.set_address(3, 123);
+        assert_eq!(computer.run(vec![]).0, vec![123]);
     }
 }
