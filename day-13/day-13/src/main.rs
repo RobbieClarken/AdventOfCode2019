@@ -1,13 +1,38 @@
 use intcode_computer::Computer;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
-use std::cmp::max;
+use std::cmp::{max, Ordering};
+use std::env;
+use std::io::{self, Write};
+use std::thread::sleep;
+use std::time::Duration;
 
 const ROWS: usize = 1000;
 const COLUMNS: usize = 1000;
 
 fn main() {
-    challenge_1();
+    let mut args = env::args();
+    match args.nth(1) {
+        Some(s) if s == "1" => {
+            challenge_1();
+        }
+        Some(s) if s == "2" => {
+            challenge_2();
+        }
+        _ => {
+            usage();
+        }
+    }
+}
+
+fn usage() {
+    let mut args = env::args();
+    println!("Usage:");
+    println!("    {} NUMBER", args.nth(0).unwrap());
+    println!();
+    println!("Arguments:");
+    println!("    number: Which part of the puzzle to solve (1 or 2)");
+    std::process::exit(1);
 }
 
 fn challenge_1() {
@@ -25,7 +50,41 @@ fn challenge_1() {
     }
     let count = count_tile_type(&screen, Tile::Block);
     println!("Challenge 1: Block tiles left on screen = {}", count);
-    print!("{}", screen.output());
+}
+
+fn challenge_2() {
+    let mut player = Player::new();
+    let mut screen = Screen::new();
+    let mut computer = Computer::load_from_file("input");
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+
+    // set number of quarters to 2
+    computer.set_address(0, 2);
+
+    let mut score = 0;
+    let mut joystick = 0;
+    loop {
+        let (out, complete) = computer.run(vec![joystick]);
+        assert_eq!(out.len() % 3, 0);
+        for i in (0..out.len()).step_by(3) {
+            if out[i] == -1 {
+                score = out[i + 2];
+                continue;
+            }
+            screen.process(out[i] as usize, out[i + 1] as usize, out[i + 2] as u8);
+        }
+        let game_state = screen.output();
+        handle.write_all(b"\x1b[2J\x1b[1;1H").unwrap();
+        handle.write_all(game_state.as_bytes()).unwrap();
+        handle.flush().unwrap();
+        sleep(Duration::from_millis(1));
+        joystick = player.process(&game_state) as i64;
+        if complete {
+            break;
+        }
+    }
+    println!("Challenge 2: Final score = {}", score);
 }
 
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Clone, Copy)]
@@ -105,6 +164,33 @@ fn count_tile_type(screen: &Screen, tile: Tile) -> u32 {
     count
 }
 
+struct Player;
+
+impl Player {
+    fn new() -> Self {
+        Self {}
+    }
+
+    fn process(&mut self, state: &str) -> i8 {
+        let (ball_x, _) = self.find_char(state, 'o').unwrap();
+        let (paddle_x, _) = self.find_char(state, '=').unwrap();
+        match ball_x.cmp(&paddle_x) {
+            Ordering::Greater => 1,
+            Ordering::Less => -1,
+            Ordering::Equal => 0,
+        }
+    }
+
+    fn find_char(&self, state: &str, chr: char) -> Option<(i32, i32)> {
+        for (y, row) in state.lines().enumerate() {
+            if let Some(x) = row.find(chr) {
+                return Some((x as i32, y as i32));
+            }
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod test_day_13 {
     use super::*;
@@ -166,5 +252,30 @@ mod test_day_13 {
         screen.process(1, 0, Tile::Wall.as_u8());
         screen.process(0, 1, Tile::Paddle.as_u8());
         assert_eq!(screen.output(), "oX\n= \n");
+    }
+
+    #[test]
+    fn player_doesnt_move_paddle_if_below_ball() {
+        let mut player = Player::new();
+        let state = "
+            o
+            =
+        ";
+        assert_eq!(player.process(&state), 0);
+    }
+
+    #[test]
+    fn player_follows_ball() {
+        let mut player = Player::new();
+        let state = "
+             o
+            =
+        ";
+        assert_eq!(player.process(&state), 1);
+        let state = "
+            o
+             =
+        ";
+        assert_eq!(player.process(&state), -1);
     }
 }
