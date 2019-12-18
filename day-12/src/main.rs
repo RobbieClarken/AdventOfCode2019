@@ -1,5 +1,7 @@
 use regex::{Captures, Regex};
 use std::collections::HashSet;
+use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
 
 fn main() {
@@ -43,22 +45,22 @@ struct System {
 }
 
 impl System {
-    fn step(&mut self) {
-        self.x.step();
-        self.y.step();
-        self.z.step();
-    }
-
     fn apply_steps(&mut self, number_of_steps: u32) {
-        for _ in 0..number_of_steps {
-            self.step();
-        }
+        let rx_x = self.x.apply_steps_async(number_of_steps);
+        let rx_y = self.y.apply_steps_async(number_of_steps);
+        let rx_z = self.z.apply_steps_async(number_of_steps);
+        self.x = rx_x.recv().unwrap();
+        self.y = rx_y.recv().unwrap();
+        self.z = rx_z.recv().unwrap();
     }
 
     fn steps_until_repeat(&self) -> u64 {
-        let x_steps = self.x.steps_until_repeat();
-        let y_steps = self.y.steps_until_repeat();
-        let z_steps = self.z.steps_until_repeat();
+        let rx_x = self.x.steps_until_repeat_async();
+        let rx_y = self.y.steps_until_repeat_async();
+        let rx_z = self.z.steps_until_repeat_async();
+        let x_steps = rx_x.recv().unwrap();
+        let y_steps = rx_y.recv().unwrap();
+        let z_steps = rx_z.recv().unwrap();
         lcm(lcm(x_steps, y_steps), z_steps)
     }
 
@@ -88,6 +90,27 @@ impl System1d {
         self.1.step(&initial);
         self.2.step(&initial);
         self.3.step(&initial);
+    }
+
+    fn apply_steps_async(mut self, number_of_steps: u32) -> mpsc::Receiver<Self> {
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            self.apply_steps(number_of_steps);
+            tx.send(self).unwrap();
+        });
+        rx
+    }
+
+    fn apply_steps(&mut self, number_of_steps: u32) {
+        for _ in 0..number_of_steps {
+            self.step();
+        }
+    }
+
+    fn steps_until_repeat_async(self) -> mpsc::Receiver<u64> {
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || tx.send(self.steps_until_repeat()).unwrap());
+        rx
     }
 
     fn steps_until_repeat(&self) -> u64 {
@@ -204,7 +227,7 @@ mod test_day_12 {
             ",
         );
 
-        system.step();
+        system.apply_steps(1);
         assert_eq!(
             system,
             Parser::parse(
@@ -217,7 +240,7 @@ mod test_day_12 {
             )
         );
 
-        system.step();
+        system.apply_steps(1);
         assert_eq!(
             system,
             Parser::parse(
