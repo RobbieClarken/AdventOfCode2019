@@ -2,13 +2,20 @@ use regex::Regex;
 use std::fmt;
 
 fn main() {
-    challenge_1();
+    let input = std::fs::read_to_string("input").unwrap();
+    challenge_1(&input);
+    challenge_2(&input);
 }
 
-fn challenge_1() {
-    let input = std::fs::read_to_string("input").unwrap();
-    let ore = required_ore(&input);
+fn challenge_1(input: &str) {
+    let ore = required_ore(input);
     println!("Challenge 1: Required ore = {}", ore);
+}
+
+fn challenge_2(input: &str) {
+    let reactions = Reactions::parse(input);
+    let fuel = reactions.max_fuel_produced(1_000_000_000_000);
+    println!("Challenge 2: Max fuel produced = {}", fuel);
 }
 
 fn required_ore(input: &str) -> u64 {
@@ -91,6 +98,30 @@ impl Reactions {
             }
         }
         unreachable!("Could not find a reaction with output {}", &output);
+    }
+
+    fn max_fuel_produced(&self, ore: u64) -> u64 {
+        let empty = Vec::new();
+        let (ore_for_one_fuel, _) = self.required_ore(Ingredient::new("FUEL", 1), &empty);
+        let mut lower_bound = ore / ore_for_one_fuel;
+        let mut upper_bound = 2 * lower_bound;
+        loop {
+            if lower_bound == upper_bound {
+                return lower_bound;
+            }
+            let guess = lower_bound + (upper_bound - lower_bound) / 2;
+            let (below, _) = self.required_ore(Ingredient::new("FUEL", guess), &empty);
+            if below > ore {
+                upper_bound = guess;
+                continue;
+            }
+            let (above, _) = self.required_ore(Ingredient::new("FUEL", guess + 1), &empty);
+            if above <= ore {
+                lower_bound = guess;
+                continue;
+            }
+            return guess;
+        }
     }
 }
 
@@ -276,5 +307,87 @@ mod test_day_14 {
             5 BHXH, 4 VRPVC => 5 LTCX
         ";
         assert_eq!(required_ore(&input), 2210736);
+    }
+
+    #[test]
+    fn calculates_amount_of_ore_needed_to_make_large_amounts_of_fuel() {
+        let input = "
+            171 ORE => 8 CNZTR
+            7 ZLQW, 3 BMBT, 9 XCVML, 26 XMNCP, 1 WPTQ, 2 MZWV, 1 RJRHP => 4 PLWSL
+            114 ORE => 4 BHXH
+            14 VRPVC => 6 BMBT
+            6 BHXH, 18 KTJDG, 12 WPTQ, 7 PLWSL, 31 FHTLT, 37 ZDVW => 1 FUEL
+            6 WPTQ, 2 BMBT, 8 ZLQW, 18 KTJDG, 1 XMNCP, 6 MZWV, 1 RJRHP => 6 FHTLT
+            15 XDBXC, 2 LTCX, 1 VRPVC => 6 ZLQW
+            13 WPTQ, 10 LTCX, 3 RJRHP, 14 XMNCP, 2 MZWV, 1 ZLQW => 1 ZDVW
+            5 BMBT => 4 WPTQ
+            189 ORE => 9 KTJDG
+            1 MZWV, 17 XDBXC, 3 XCVML => 2 XMNCP
+            12 VRPVC, 27 CNZTR => 2 XDBXC
+            15 KTJDG, 12 BHXH => 5 XCVML
+            3 BHXH, 2 VRPVC => 7 MZWV
+            121 ORE => 7 VRPVC
+            7 XCVML => 6 RJRHP
+            5 BHXH, 4 VRPVC => 5 LTCX
+        ";
+        let reactions = Reactions::parse(&input);
+        let (ore_below, _) = reactions.required_ore(Ingredient::new("FUEL", 460_664), &[]);
+        let (ore_above, _) = reactions.required_ore(Ingredient::new("FUEL", 460_665), &[]);
+        assert!(ore_below <= 1_000_000_000_000 && ore_above > 1_000_000_000_000);
+    }
+
+    #[test]
+    fn finds_amount_of_fuel_that_an_be_produced() {
+        let ore = 1_000_000_000_000;
+
+        let input = "
+            157 ORE => 5 NZVS
+            165 ORE => 6 DCFZ
+            44 XJWVT, 5 KHKGT, 1 QDVJ, 29 NZVS, 9 GPVTF, 48 HKGWZ => 1 FUEL
+            12 HKGWZ, 1 GPVTF, 8 PSHF => 9 QDVJ
+            179 ORE => 7 PSHF
+            177 ORE => 5 HKGWZ
+            7 DCFZ, 7 PSHF => 2 XJWVT
+            165 ORE => 2 GPVTF
+            3 DCFZ, 7 NZVS, 5 HKGWZ, 10 PSHF => 8 KHKGT
+        ";
+        assert_eq!(Reactions::parse(&input).max_fuel_produced(ore), 82_892_753);
+
+        let input = "
+            2 VPVL, 7 FWMGM, 2 CXFTF, 11 MNCFX => 1 STKFG
+            17 NVRVD, 3 JNWZP => 8 VPVL
+            53 STKFG, 6 MNCFX, 46 VJHF, 81 HVMC, 68 CXFTF, 25 GNMV => 1 FUEL
+            22 VJHF, 37 MNCFX => 5 FWMGM
+            139 ORE => 4 NVRVD
+            144 ORE => 7 JNWZP
+            5 MNCFX, 7 RFSQX, 2 FWMGM, 2 VPVL, 19 CXFTF => 3 HVMC
+            5 VJHF, 7 MNCFX, 9 VPVL, 37 CXFTF => 6 GNMV
+            145 ORE => 6 MNCFX
+            1 NVRVD => 8 CXFTF
+            1 VJHF, 6 MNCFX => 4 RFSQX
+            176 ORE => 6 VJHF
+        ";
+        assert_eq!(Reactions::parse(&input).max_fuel_produced(ore), 5_586_022);
+
+        let input = "
+            171 ORE => 8 CNZTR
+            7 ZLQW, 3 BMBT, 9 XCVML, 26 XMNCP, 1 WPTQ, 2 MZWV, 1 RJRHP => 4 PLWSL
+            114 ORE => 4 BHXH
+            14 VRPVC => 6 BMBT
+            6 BHXH, 18 KTJDG, 12 WPTQ, 7 PLWSL, 31 FHTLT, 37 ZDVW => 1 FUEL
+            6 WPTQ, 2 BMBT, 8 ZLQW, 18 KTJDG, 1 XMNCP, 6 MZWV, 1 RJRHP => 6 FHTLT
+            15 XDBXC, 2 LTCX, 1 VRPVC => 6 ZLQW
+            13 WPTQ, 10 LTCX, 3 RJRHP, 14 XMNCP, 2 MZWV, 1 ZLQW => 1 ZDVW
+            5 BMBT => 4 WPTQ
+            189 ORE => 9 KTJDG
+            1 MZWV, 17 XDBXC, 3 XCVML => 2 XMNCP
+            12 VRPVC, 27 CNZTR => 2 XDBXC
+            15 KTJDG, 12 BHXH => 5 XCVML
+            3 BHXH, 2 VRPVC => 7 MZWV
+            121 ORE => 7 VRPVC
+            7 XCVML => 6 RJRHP
+            5 BHXH, 4 VRPVC => 5 LTCX
+        ";
+        assert_eq!(Reactions::parse(&input).max_fuel_produced(ore), 460_664);
     }
 }
