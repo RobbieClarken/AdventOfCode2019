@@ -11,6 +11,8 @@ name = "day-15"
 version = "0.1.0"
 dependencies = [
  "intcode-computer",
+ "num-derive",
+ "num-traits",
 ]
 
 [[package]]
