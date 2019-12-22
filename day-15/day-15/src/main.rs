@@ -2,7 +2,7 @@ use intcode_computer::Computer;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use std::cmp::{max, min};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::io::Write;
 use std::thread::sleep;
@@ -16,9 +16,22 @@ const DRAW: bool = false;
 
 fn main() {
     challenge_1();
+    challenge_2();
 }
 
 fn challenge_1() {
+    let environment = explore_environment();
+    let path = PathFinder::path_to_tile((0, 0), Tile::Target, &environment).unwrap();
+    println!("Challenge 1: Moves to oxygen system = {}", path.len());
+}
+
+fn challenge_2() {
+    let environment = explore_environment();
+    let fill_time = OxygenSimulator::new(environment).fill_time();
+    println!("Challenge 2: Fill time = {}", fill_time);
+}
+
+fn explore_environment() -> Environment {
     let mut computer = Computer::load_from_file("input");
     let mut robot = Robot::new();
     let stdout = std::io::stdout();
@@ -37,8 +50,7 @@ fn challenge_1() {
             sleep(Duration::from_millis(10));
         }
     }
-    let path = PathFinder::path_to_tile((0, 0), Tile::Target, &robot.environment).unwrap();
-    println!("Challenge 1: Moves to oxygen system = {}", path.len());
+    robot.environment
 }
 
 #[derive(Clone, Copy)]
@@ -121,6 +133,72 @@ impl Environment {
             writeln!(&mut out).unwrap();
         }
         String::from_utf8(out).unwrap()
+    }
+
+    fn limits(&self) -> ((i32, i32), (i32, i32)) {
+        let ((row_min, row_max), (col_min, col_max)) = self.bounds.unwrap();
+        (
+            (
+                col_min as i32 - X_OFFSET as i32,
+                col_max as i32 - X_OFFSET as i32,
+            ),
+            (
+                row_min as i32 - Y_OFFSET as i32,
+                row_max as i32 - Y_OFFSET as i32,
+            ),
+        )
+    }
+}
+
+#[allow(dead_code)]
+struct OxygenSimulator {
+    environment: Environment,
+}
+
+impl OxygenSimulator {
+    fn new(mut environment: Environment) -> Self {
+        let ((x_min, x_max), (y_min, y_max)) = environment.limits();
+        for x in x_min..=x_max {
+            for y in y_min..=y_max {
+                if let Tile::Target = environment.get(x, y) {
+                    environment.set(x, y, Tile::Oxygen);
+                }
+            }
+        }
+        Self { environment }
+    }
+
+    fn fill_time(&mut self) -> usize {
+        let mut minutes = 0;
+        while self.next() {
+            minutes += 1;
+        }
+        minutes
+    }
+
+    fn next(&mut self) -> bool {
+        let mut new_oxygen_coords = HashSet::new();
+        let ((x_min, x_max), (y_min, y_max)) = self.environment.limits();
+        for x in x_min..=x_max {
+            for y in y_min..=y_max {
+                if let Tile::Oxygen = self.environment.get(x, y) {
+                    self.fill_if_empty(x - 1, y, &mut new_oxygen_coords);
+                    self.fill_if_empty(x + 1, y, &mut new_oxygen_coords);
+                    self.fill_if_empty(x, y - 1, &mut new_oxygen_coords);
+                    self.fill_if_empty(x, y + 1, &mut new_oxygen_coords);
+                }
+            }
+        }
+        for (x, y) in &new_oxygen_coords {
+            self.environment.set(*x, *y, Tile::Oxygen);
+        }
+        !new_oxygen_coords.is_empty()
+    }
+
+    fn fill_if_empty(&self, x: i32, y: i32, set: &mut HashSet<(i32, i32)>) {
+        if let Tile::Empty = self.environment.get(x, y) {
+            set.insert((x, y));
+        }
     }
 }
 
@@ -270,6 +348,7 @@ enum Tile {
     Unknown,
     Wall,
     Target,
+    Oxygen,
 }
 
 impl From<char> for Tile {
@@ -279,6 +358,7 @@ impl From<char> for Tile {
             ' ' => Self::Unknown,
             '#' => Self::Wall,
             'X' => Self::Target,
+            'O' => Self::Oxygen,
             _ => unimplemented!("unexpected tile character: {}", c),
         }
     }
@@ -294,6 +374,7 @@ impl fmt::Display for Tile {
                 Self::Unknown => ' ',
                 Self::Wall => '#',
                 Self::Target => 'X',
+                Self::Oxygen => 'O',
             }
         )
     }
@@ -548,5 +629,76 @@ mod test_day_15 {
                 .len(),
             7
         );
+    }
+
+    #[test]
+    fn OxygenSimulator_simulates_environment_filling_with_oxygen() {
+        let mut simulator = OxygenSimulator::new(Environment::from_map(
+            "
+ ##  #
+#..###
+#.#..#
+#.X.##
+ #####
+",
+        ));
+
+        simulator.next();
+        let expected_map = "
+ ##  #
+#..###
+#.#..#
+#OOO##
+ #####
+"
+        .trim_start_matches('\n');
+        assert_eq!(simulator.environment.map(), expected_map,);
+
+        simulator.next();
+        let expected_map = "
+ ##  #
+#..###
+#O#O.#
+#OOO##
+ #####
+"
+        .trim_start_matches('\n');
+        assert_eq!(simulator.environment.map(), expected_map,);
+
+        simulator.next();
+        let expected_map = "
+ ##  #
+#O.###
+#O#OO#
+#OOO##
+ #####
+"
+        .trim_start_matches('\n');
+        assert_eq!(simulator.environment.map(), expected_map,);
+
+        simulator.next();
+        let expected_map = "
+ ##  #
+#OO###
+#O#OO#
+#OOO##
+ #####
+"
+        .trim_start_matches('\n');
+        assert_eq!(simulator.environment.map(), expected_map,);
+    }
+
+    #[test]
+    fn OxygenSimulator_calculates_how_long_it_takes_to_fill_with_oxygen() {
+        let mut simulator = OxygenSimulator::new(Environment::from_map(
+            "
+ ##  #
+#..###
+#.#..#
+#.X.##
+ #####
+",
+        ));
+        assert_eq!(simulator.fill_time(), 4);
     }
 }
