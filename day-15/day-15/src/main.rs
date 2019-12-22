@@ -12,6 +12,7 @@ const ROWS: usize = 1000;
 const COLUMNS: usize = 1000;
 const X_OFFSET: usize = COLUMNS / 2;
 const Y_OFFSET: usize = ROWS / 2;
+const DRAW: bool = false;
 
 fn main() {
     challenge_1();
@@ -30,10 +31,14 @@ fn challenge_1() {
         let direction = direction.unwrap();
         let (out, _) = computer.run(vec![direction.into()]);
         robot.process(out[0].into());
-        handle.write_all(b"\x1b[2J").unwrap();
-        handle.write_all(robot.map().as_bytes()).unwrap();
-        sleep(Duration::from_millis(10));
+        if DRAW {
+            handle.write_all(b"\x1b[2J").unwrap();
+            handle.write_all(robot.map().as_bytes()).unwrap();
+            sleep(Duration::from_millis(10));
+        }
     }
+    let path = PathFinder::path_to_tile((0, 0), Tile::Target, &robot.environment).unwrap();
+    println!("Challenge 1: Moves to oxygen system = {}", path.len());
 }
 
 #[derive(Clone, Copy)]
@@ -75,6 +80,18 @@ impl Environment {
         }
     }
 
+    #[allow(dead_code)]
+    fn from_map(map: &str) -> Self {
+        let mut environment = Self::new();
+        for (y, line) in map.trim_start_matches('\n').lines().enumerate() {
+            for (x, chr) in line.chars().enumerate() {
+                let tile: Tile = chr.into();
+                environment.set(x as i32, y as i32, tile);
+            }
+        }
+        environment
+    }
+
     fn get(&self, x: i32, y: i32) -> Tile {
         self.tiles[Self::row(y)][Self::column(x)]
     }
@@ -114,23 +131,26 @@ struct PathFinder<'a> {
 }
 
 impl<'a> PathFinder<'_> {
-    fn path_to_unknown(
-        x_start: i32,
-        y_start: i32,
+    fn path_to_tile(
+        start: (i32, i32),
+        tile: Tile,
         environment: &'a Environment,
     ) -> Option<Vec<(i32, i32)>> {
-        let paths = vec![(x_start, y_start)];
+        let paths = vec![start];
         let mut visited = HashMap::new();
-        visited.insert((x_start, y_start), 0);
+        visited.insert(start, 0);
         let mut finder = PathFinder {
             environment,
             paths,
             visited,
         };
-        finder.find()
+        finder.find(|(x, y)| environment.get(x, y) == tile)
     }
 
-    fn find(&mut self) -> Option<Vec<(i32, i32)>> {
+    fn find<F>(&mut self, at_destination: F) -> Option<Vec<(i32, i32)>>
+    where
+        F: Fn((i32, i32)) -> bool,
+    {
         let mut i = 0;
         let mut found = None;
         'outer: while i < self.paths.len() {
@@ -152,7 +172,7 @@ impl<'a> PathFinder<'_> {
             for (x, y) in new_steps {
                 self.paths.push((x, y));
                 self.visited.insert((x, y), distance_of_new_steps);
-                if self.environment.get(x, y) == Tile::Unknown {
+                if at_destination((x, y)) {
                     found = Some(((x, y), distance_of_new_steps));
                     break 'outer;
                 }
@@ -209,7 +229,7 @@ impl Robot {
     }
 
     fn next_move(&self) -> Option<Direction> {
-        let path = PathFinder::path_to_unknown(self.x, self.y, &self.environment)?;
+        let path = PathFinder::path_to_tile((self.x, self.y), Tile::Unknown, &self.environment)?;
         let (x_next, y_next) = path[0];
         Some(match (x_next - self.x, y_next - self.y) {
             (0, -1) => Direction::North,
@@ -488,21 +508,15 @@ mod test_day_15 {
 
     #[test]
     fn PathFinder_finds_path_to_closest_Unknown() {
-        let mut environment = Environment::new();
-        let map = "
+        let environment = Environment::from_map(
+            "
  # \n\
 #.#
  . \n\
-"
-        .trim_start_matches('\n');
-        for (y, line) in map.lines().enumerate() {
-            for (x, chr) in line.chars().enumerate() {
-                let tile: Tile = chr.into();
-                environment.set(x as i32, y as i32, tile);
-            }
-        }
+",
+        );
         assert_eq!(
-            PathFinder::path_to_unknown(1, 1, &environment),
+            PathFinder::path_to_tile((1, 1), Tile::Unknown, &environment),
             Some(vec![(1, 2), (2, 2)]),
         );
     }
@@ -515,5 +529,24 @@ mod test_day_15 {
         robot.process(Status::HitWall);
         robot.process(Status::HitWall);
         assert_eq!(robot.next_move(), None);
+    }
+
+    #[test]
+    fn PathFinder_finds_path_to_Target() {
+        let environment = Environment::from_map(
+            "
+######
+#.#.X#
+#.#..#
+#....#
+######
+",
+        );
+        assert_eq!(
+            PathFinder::path_to_tile((1, 1), Tile::Target, &environment)
+                .unwrap()
+                .len(),
+            7
+        );
     }
 }
