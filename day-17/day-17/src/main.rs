@@ -1,6 +1,5 @@
-#![allow(dead_code)]
 use intcode_computer::Computer;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 const MAX_PATTERN_LENGTH: usize = 20;
 
@@ -56,16 +55,32 @@ enum Direction {
 }
 
 impl Direction {
-    fn steps_to(self, other: Direction) -> String {
-        let diff = (other as i32 - self as i32 + 4) % 4;
-        match diff {
-            0 => "",
-            1 => "R",
-            2 => "RR",
-            3 => "L",
-            _ => unreachable!("steps_to"),
+    fn left(self) -> Self {
+        match self {
+            Self::Up => Self::Left,
+            Self::Right => Self::Up,
+            Self::Down => Self::Right,
+            Self::Left => Self::Down,
         }
-        .to_string()
+    }
+
+    fn right(self) -> Self {
+        match self {
+            Self::Up => Self::Right,
+            Self::Right => Self::Down,
+            Self::Down => Self::Left,
+            Self::Left => Self::Up,
+        }
+    }
+
+    fn step_from(self, x: i32, y: i32) -> (i32, i32) {
+        let (dx, dy) = match self {
+            Self::Up => (0, -1),
+            Self::Right => (1, 0),
+            Self::Down => (0, 1),
+            Self::Left => (-1, 0),
+        };
+        (x + dx, y + dy)
     }
 }
 
@@ -97,7 +112,6 @@ enum Tile {
     Robot(Direction),
     Empty,
     Scaffold,
-    Visited,
 }
 
 impl From<char> for Tile {
@@ -106,7 +120,6 @@ impl From<char> for Tile {
             '^' | '>' | 'v' | '<' => Self::Robot(c.into()),
             '.' => Self::Empty,
             '#' => Self::Scaffold,
-            'V' => Self::Visited,
             _ => unreachable!(),
         }
     }
@@ -121,7 +134,6 @@ impl ToString for Tile {
             Self::Robot(Direction::Right) => ">",
             Self::Empty => ".",
             Self::Scaffold => "#",
-            Self::Visited => "V",
         })
         .to_owned()
     }
@@ -156,10 +168,6 @@ impl Environment {
         }
     }
 
-    fn set(&mut self, x: usize, y: usize, tile: Tile) {
-        self.view[y][x] = tile;
-    }
-
     fn x_max(&self) -> usize {
         self.view[0].len() - 1
     }
@@ -168,46 +176,16 @@ impl Environment {
         self.view.len() - 1
     }
 
-    fn shortest_path_to_unvisited(&self) -> Option<Vec<(usize, usize)>> {
-        let mut tracker: Tracker = Default::default();
-        tracker.insert(self.robot_location.x, self.robot_location.y, 0);
-        'outer: loop {
-            let (x, y, distance) = tracker.next()?;
-            let mut next_steps = vec![];
-            if x > 0 {
-                next_steps.push((x - 1, y));
-            }
-            if x < self.x_max() {
-                next_steps.push((x + 1, y));
-            }
-            if y > 0 {
-                next_steps.push((x, y - 1));
-            }
-            if y < self.y_max() {
-                next_steps.push((x, y + 1));
-            }
+    fn in_bounds(&self, x: i32, y: i32) -> bool {
+        x >= 0 && y >= 0 && x <= self.x_max() as i32 && y <= self.y_max() as i32
+    }
 
-            let new_distance = distance + 1;
-            for (x_step, y_step) in next_steps {
-                if self.is_unvisited(x_step, y_step) {
-                    tracker.insert(x_step, y_step, new_distance);
-                    break 'outer;
-                }
-                if tracker.contains(x_step, y_step) || !self.can_move_to(x_step, y_step) {
-                    continue;
-                }
-                tracker.insert(x_step, y_step, new_distance);
-            }
+    fn is_scaffold(&self, x: i32, y: i32) -> bool {
+        if !self.in_bounds(x, y) {
+            return false;
         }
-        Some(tracker.path())
-    }
-
-    fn is_unvisited(&self, x: usize, y: usize) -> bool {
-        self.view[y][x] == Tile::Scaffold
-    }
-
-    fn can_move_to(&self, x: usize, y: usize) -> bool {
-        self.view[y][x] == Tile::Scaffold || self.view[y][x] == Tile::Visited
+        let tile = self.view[y as usize][x as usize];
+        tile == Tile::Scaffold
     }
 }
 
@@ -221,59 +199,6 @@ impl ToString for Environment {
             out.push('\n');
         }
         out
-    }
-}
-
-#[derive(Default)]
-struct Tracker {
-    index: usize,
-    steps: Vec<(usize, usize)>,
-    distances: HashMap<(usize, usize), usize>,
-}
-
-impl Tracker {
-    fn next(&mut self) -> Option<(usize, usize, usize)> {
-        if self.index >= self.steps.len() {
-            return None;
-        }
-        let (x, y) = self.steps[self.index];
-        let distance = *self.distances.get(&(x, y)).unwrap();
-        self.index += 1;
-        Some((x, y, distance))
-    }
-
-    fn contains(&self, x: usize, y: usize) -> bool {
-        self.distances.contains_key(&(x, y))
-    }
-
-    fn path(&self) -> Vec<(usize, usize)> {
-        let &(mut x, mut y) = self.steps.last().unwrap();
-        let &last_distance = self.distances.get(&(x, y)).unwrap();
-        let mut path = vec![(x, y)];
-        for distance in (0..last_distance).rev() {
-            if self.distances.get(&(x + 1, y)) == Some(&distance) {
-                x += 1;
-                path.push((x, y));
-            } else if x > 0 && self.distances.get(&(x - 1, y)) == Some(&distance) {
-                x -= 1;
-                path.push((x, y));
-            } else if self.distances.get(&(x, y + 1)) == Some(&distance) {
-                y += 1;
-                path.push((x, y));
-            } else if y > 0 && self.distances.get(&(x, y - 1)) == Some(&distance) {
-                y -= 1;
-                path.push((x, y));
-            } else {
-                unreachable!("couldn't find step from {}, {}", x, y);
-            }
-        }
-        path.reverse();
-        path[1..].to_vec()
-    }
-
-    fn insert(&mut self, x: usize, y: usize, distance: usize) {
-        self.steps.push((x, y));
-        self.distances.insert((x, y), distance);
     }
 }
 
@@ -301,30 +226,40 @@ fn is_scaffold(map: &[Vec<char>], row: usize, column: usize) -> bool {
 }
 
 fn find_path(env: &mut Environment) -> String {
-    env.set(env.robot_location.x, env.robot_location.y, 'V'.into());
+    let mut x = env.robot_location.x as i32;
+    let mut y = env.robot_location.y as i32;
+    let mut direction = env.robot_location.direction;
     let mut out = String::new();
     loop {
-        let path = env.shortest_path_to_unvisited();
-        if path.is_none() {
-            break;
-        }
-        for (x_new, y_new) in path.unwrap() {
-            let x = env.robot_location.x;
-            let y = env.robot_location.y;
-            let new_direction = match (x_new as i32 - x as i32, y_new as i32 - y as i32) {
-                (0, -1) => Direction::Up,
-                (0, 1) => Direction::Down,
-                (-1, 0) => Direction::Left,
-                (1, 0) => Direction::Right,
-                step => unreachable!("unexpected step: {:?}", step),
-            };
-            out.push_str(&env.robot_location.direction.steps_to(new_direction));
+        let (x_new, y_new) = direction.step_from(x, y);
+        if env.is_scaffold(x_new, y_new) {
+            x = x_new;
+            y = y_new;
             out.push('F');
-            env.set(x_new, y_new, 'V'.into());
-            env.robot_location.direction = new_direction;
-            env.robot_location.x = x_new;
-            env.robot_location.y = y_new;
+            continue;
         }
+
+        let direction_new = direction.left();
+        let (x_new, y_new) = direction_new.step_from(x, y);
+        if env.is_scaffold(x_new, y_new) {
+            x = x_new;
+            y = y_new;
+            direction = direction_new;
+            out.push_str("LF");
+            continue;
+        }
+
+        let direction_new = direction.right();
+        let (x_new, y_new) = direction_new.step_from(x, y);
+        if env.is_scaffold(x_new, y_new) {
+            x = x_new;
+            y = y_new;
+            direction = direction_new;
+            out.push_str("RF");
+            continue;
+        }
+
+        break;
     }
     out
 }
@@ -476,21 +411,7 @@ mod test_day_17 {
         );
         let mut env = Environment::load(view);
         let path = find_path(&mut env);
-        assert_eq!(path[..7], *"FFLFFFF");
-    }
-
-    #[test]
-    fn finds_path_that_when_multiple_steps_are_required_to_get_to_unvisited() {
-        let view = to_vec_i64(
-            "
-VVV>
-.#..
-"
-            .trim_start_matches('\n'),
-        );
-        let mut env = Environment::load(view);
-        let path = find_path(&mut env);
-        assert_eq!(path, *"RRFFLF");
+        assert_eq!(&path, "FFLFFFFFFFFFFRFFRFFFFFFRFFFFRFFFFRFFFFFF");
     }
 
     fn vec_of_strings(input: &[&str]) -> Vec<String> {
