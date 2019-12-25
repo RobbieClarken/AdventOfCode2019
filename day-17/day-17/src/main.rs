@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 use intcode_computer::Computer;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+const MAX_PATTERN_LENGTH: usize = 20;
 
 fn main() {
     challenge_1();
@@ -21,8 +23,11 @@ fn challenge_2() {
     let mut computer = Computer::load_from_file("input");
     let mut env = Environment::load(computer.run(vec![]).0);
     let path = find_path(&mut env);
-    println!("{}", path);
-    println!("{}", path.len());
+    let pattern_sets = get_pattern_sets(&[path], 3);
+    let best_set = pattern_sets
+        .iter()
+        .max_by_key(|set| set[0].len() + set[1].len() + set[2].len());
+    println!("{:?}", best_set);
 }
 
 #[derive(Debug, PartialEq)]
@@ -324,6 +329,78 @@ fn find_path(env: &mut Environment) -> String {
     out
 }
 
+fn get_pattern_sets(slices: &[String], n: usize) -> Vec<Vec<String>> {
+    if slices.is_empty() {
+        return vec![vec!["".to_owned(); n]];
+    }
+    if n == 1 {
+        let smallest = slices.iter().min_by_key(|s| s.len()).unwrap();
+        if reduce_pattern(smallest).len() > MAX_PATTERN_LENGTH {
+            return vec![];
+        }
+        for slice in slices {
+            let leftover = slice.replace(smallest, "");
+            if !leftover.is_empty() {
+                return vec![];
+            }
+        }
+        return vec![vec![smallest.to_string()]];
+    } else {
+        let mut pattern_sets = HashSet::new();
+        for slice in slices {
+            for length in 1..=slice.len() {
+                let candidate = slice[..length].to_owned();
+                if reduce_pattern(&candidate).len() > MAX_PATTERN_LENGTH {
+                    break;
+                }
+                let new_slices: Vec<_> = slices.iter().fold(vec![], |mut acc, s| {
+                    acc.extend(
+                        s.split(&candidate)
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_owned()),
+                    );
+                    acc
+                });
+                for mut pattern_set in get_pattern_sets(&new_slices, n - 1) {
+                    pattern_set.push(candidate.clone());
+                    pattern_set.sort();
+                    pattern_sets.insert(pattern_set);
+                }
+            }
+        }
+        let mut pattern_sets: Vec<Vec<String>> = pattern_sets.iter().cloned().collect();
+        pattern_sets.sort();
+        pattern_sets
+    }
+}
+
+fn reduce_pattern(pattern: &str) -> String {
+    let mut out = String::new();
+    let mut counter: Option<usize> = None;
+    for c in pattern.chars() {
+        match (c, &mut counter) {
+            ('F', None) => {
+                counter = Some(1);
+            }
+            ('F', Some(count)) => {
+                *count += 1;
+            }
+            (_, None) => {
+                out.push(c);
+            }
+            (_, Some(count)) => {
+                out.push_str(&format!("{}", count));
+                out.push(c);
+                counter = None;
+            }
+        }
+    }
+    if let Some(count) = counter {
+        out.push_str(&format!("{}", count));
+    }
+    out
+}
+
 #[cfg(test)]
 mod test_day_17 {
     use super::*;
@@ -414,5 +491,96 @@ VVV>
         let mut env = Environment::load(view);
         let path = find_path(&mut env);
         assert_eq!(path, *"RRFFLF");
+    }
+
+    fn vec_of_strings(input: &[&str]) -> Vec<String> {
+        input.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn finds_patterns_to_cover_slices() {
+        let slices = vec![];
+        assert_eq!(get_pattern_sets(&slices, 1), vec![vec!["".to_owned()]]);
+
+        let slices = vec_of_strings(&["R"]);
+        assert_eq!(get_pattern_sets(&slices, 1), vec![vec!["R".to_owned()]]);
+
+        let slices = vec_of_strings(&["RRR", "R", "RR"]);
+        assert_eq!(get_pattern_sets(&slices, 1), vec![vec!["R".to_owned()]]);
+
+        let slices = vec_of_strings(&["R", "L"]);
+        assert_eq!(get_pattern_sets(&slices, 1), Vec::<Vec<String>>::new());
+
+        let slices = vec_of_strings(&["R", "LLL", "RR", "L"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 2),
+            vec![vec_of_strings(&["L", "R"]),]
+        );
+
+        let slices = vec_of_strings(&["RF", "LF"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 2),
+            vec![vec_of_strings(&["LF", "RF"])]
+        );
+
+        let slices = vec_of_strings(&["RF", "RFLF", "LF"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 2),
+            vec![vec_of_strings(&["LF", "RF"])]
+        );
+
+        let slices = vec_of_strings(&["RL", "LRLF", "LF"]);
+        assert_eq!(get_pattern_sets(&slices, 2), Vec::<Vec<String>>::new());
+
+        let slices = vec_of_strings(&["R"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 3),
+            vec![vec_of_strings(&["", "", "R"])]
+        );
+
+        let slices = vec_of_strings(&["RLF"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 2),
+            vec![
+                vec_of_strings(&["", "RLF"]),
+                vec_of_strings(&["F", "RL"]),
+                vec_of_strings(&["LF", "R"]),
+            ]
+        );
+    }
+
+    #[test]
+    fn allow_reduced_patterns_up_to_20() {
+        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRF"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 1),
+            vec![vec_of_strings(&["RFRFRFRFRFRFRFRFRFRF"])]
+        );
+
+        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFF"]);
+        assert_eq!(
+            get_pattern_sets(&slices, 1),
+            vec![vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFF"])]
+        );
+
+        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFF"]);
+        let sets = get_pattern_sets(&slices, 2);
+        assert!(sets.contains(&vec_of_strings(&["", "RFRFRFRFRFRFRFRFRFRFF"])));
+    }
+
+    #[test]
+    fn doesnt_suggest_patterns_longer_than_20_chars_when_reduced() {
+        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFR"]);
+        assert_eq!(get_pattern_sets(&slices, 1), Vec::<Vec<String>>::new());
+
+        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFR"]);
+        let sets = get_pattern_sets(&slices, 2);
+        assert!(!sets.contains(&vec_of_strings(&["", "RFRFRFRFRFRFRFRFRFRFR"])));
+    }
+
+    #[test]
+    fn reduces_pattern() {
+        let pattern = "RRFLLFFFRF";
+        assert_eq!(reduce_pattern(pattern), "RR1LL3R1");
     }
 }
