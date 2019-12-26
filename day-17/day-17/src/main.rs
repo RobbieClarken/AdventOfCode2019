@@ -4,11 +4,11 @@ use std::collections::HashSet;
 const MAX_PATTERN_LENGTH: usize = 20;
 
 fn main() {
-    challenge_1();
-    challenge_2();
+    let env = challenge_1();
+    challenge_2(env);
 }
 
-fn challenge_1() {
+fn challenge_1() -> Environment {
     let mut computer = Computer::load_from_file("input");
     let env = Environment::load(computer.run(vec![]).0);
     print!("{}", env.to_string());
@@ -16,17 +16,35 @@ fn challenge_1() {
         "Challenge 1: Sum of alignment parameters = {}",
         sum_of_alignment_params(&env.to_string())
     );
+    println!();
+    env
 }
 
-fn challenge_2() {
-    let mut computer = Computer::load_from_file("input");
-    let mut env = Environment::load(computer.run(vec![]).0);
+fn challenge_2(mut env: Environment) {
+    println!("Challenge 2");
     let path = find_path(&mut env);
-    let pattern_sets = get_pattern_sets(&[path], 3);
+    let pattern_sets = get_pattern_sets(&[path.clone()], 3);
     let best_set = pattern_sets
         .iter()
-        .max_by_key(|set| set[0].len() + set[1].len() + set[2].len());
-    println!("{:?}", best_set);
+        .max_by_key(|set| set[0].len() + set[1].len() + set[2].len())
+        .unwrap();
+    let main_routine = calculate_main_routine(&path, &best_set).unwrap();
+    println!("Main routine: {}", main_routine);
+    let mut input = vec![];
+    input.extend(func_to_input(&main_routine));
+    for (code, func) in "ABC".chars().zip(best_set) {
+        let func = reduce_pattern(&func);
+        println!("{}: {}", code, func);
+        input.extend(func_to_input(&func));
+    }
+    let continuous_video_feed = ['n' as i64, '\n' as i64];
+    input.extend(&continuous_video_feed);
+
+    let mut computer = Computer::load_from_file("input");
+    computer.set_address(0, 2);
+    let (out, complete) = computer.run(input);
+    assert!(complete);
+    println!("Amount of dust collected = {}", out.last().unwrap());
 }
 
 #[derive(Debug, PartialEq)]
@@ -269,17 +287,22 @@ fn get_pattern_sets(slices: &[String], n: usize) -> Vec<Vec<String>> {
         return vec![vec!["".to_owned(); n]];
     }
     if n == 1 {
-        let smallest = slices.iter().min_by_key(|s| s.len()).unwrap();
-        if reduce_pattern(smallest).len() > MAX_PATTERN_LENGTH {
-            return vec![];
-        }
-        for slice in slices {
-            let leftover = slice.replace(smallest, "");
-            if !leftover.is_empty() {
+        let smallest_slice = slices.iter().min_by_key(|s| s.len()).unwrap();
+        let mut pattern_sets = vec![];
+        'outer: for length in 1..=smallest_slice.len() {
+            let candidate = smallest_slice[..length].to_owned();
+            if reduce_pattern(&candidate).len() > MAX_PATTERN_LENGTH {
                 return vec![];
             }
+            for slice in slices {
+                let leftover = slice.replace(&candidate, "");
+                if !leftover.is_empty() {
+                    continue 'outer;
+                }
+            }
+            pattern_sets.push(vec![candidate.to_string()]);
         }
-        return vec![vec![smallest.to_string()]];
+        pattern_sets
     } else {
         let mut pattern_sets = HashSet::new();
         for slice in slices {
@@ -297,8 +320,7 @@ fn get_pattern_sets(slices: &[String], n: usize) -> Vec<Vec<String>> {
                     acc
                 });
                 for mut pattern_set in get_pattern_sets(&new_slices, n - 1) {
-                    pattern_set.push(candidate.clone());
-                    pattern_set.sort();
+                    pattern_set.insert(0, candidate.clone());
                     pattern_sets.insert(pattern_set);
                 }
             }
@@ -322,10 +344,12 @@ fn reduce_pattern(pattern: &str) -> String {
             }
             (_, None) => {
                 out.push(c);
+                out.push(',');
             }
             (_, Some(count)) => {
-                out.push_str(&format!("{}", count));
+                out.push_str(&format!("{},", count));
                 out.push(c);
+                out.push(',');
                 counter = None;
             }
         }
@@ -333,6 +357,32 @@ fn reduce_pattern(pattern: &str) -> String {
     if let Some(count) = counter {
         out.push_str(&format!("{}", count));
     }
+    out.trim_matches(',').to_owned()
+}
+
+fn calculate_main_routine(path: &str, patterns: &[String]) -> Option<String> {
+    let mut path: String = path.to_owned();
+    for (code, pattern) in ["A,", "B,", "C,"].iter().zip(patterns) {
+        if !pattern.is_empty() {
+            path = path.replace(pattern, code);
+        }
+    }
+    if path
+        .chars()
+        .all(|c| c == 'A' || c == 'B' || c == 'C' || c == ',')
+    {
+        Some(path.trim_matches(',').to_owned())
+    } else {
+        None
+    }
+}
+
+fn func_to_input(s: &str) -> Vec<i64> {
+    if s.is_empty() {
+        return vec!['\n' as i64];
+    }
+    let mut out: Vec<i64> = s.chars().map(|c| c as i64).collect();
+    out.push('\n' as i64);
     out
 }
 
@@ -426,6 +476,9 @@ mod test_day_17 {
         let slices = vec_of_strings(&["R"]);
         assert_eq!(get_pattern_sets(&slices, 1), vec![vec!["R".to_owned()]]);
 
+        let slices = vec_of_strings(&["RR", "RRR"]);
+        assert_eq!(get_pattern_sets(&slices, 1), vec![vec!["R".to_owned()]]);
+
         let slices = vec_of_strings(&["RRR", "R", "RR"]);
         assert_eq!(get_pattern_sets(&slices, 1), vec![vec!["R".to_owned()]]);
 
@@ -435,19 +488,19 @@ mod test_day_17 {
         let slices = vec_of_strings(&["R", "LLL", "RR", "L"]);
         assert_eq!(
             get_pattern_sets(&slices, 2),
-            vec![vec_of_strings(&["L", "R"]),]
+            vec![vec_of_strings(&["L", "R"]), vec_of_strings(&["R", "L"])]
         );
 
         let slices = vec_of_strings(&["RF", "LF"]);
         assert_eq!(
             get_pattern_sets(&slices, 2),
-            vec![vec_of_strings(&["LF", "RF"])]
+            vec![vec_of_strings(&["LF", "RF"]), vec_of_strings(&["RF", "LF"])]
         );
 
         let slices = vec_of_strings(&["RF", "RFLF", "LF"]);
         assert_eq!(
             get_pattern_sets(&slices, 2),
-            vec![vec_of_strings(&["LF", "RF"])]
+            vec![vec_of_strings(&["LF", "RF"]), vec_of_strings(&["RF", "LF"])]
         );
 
         let slices = vec_of_strings(&["RL", "LRLF", "LF"]);
@@ -456,37 +509,37 @@ mod test_day_17 {
         let slices = vec_of_strings(&["R"]);
         assert_eq!(
             get_pattern_sets(&slices, 3),
-            vec![vec_of_strings(&["", "", "R"])]
+            vec![vec_of_strings(&["R", "", ""])]
         );
 
         let slices = vec_of_strings(&["RLF"]);
         assert_eq!(
             get_pattern_sets(&slices, 2),
             vec![
-                vec_of_strings(&["", "RLF"]),
-                vec_of_strings(&["F", "RL"]),
-                vec_of_strings(&["LF", "R"]),
+                vec_of_strings(&["R", "LF"]),
+                vec_of_strings(&["RL", "F"]),
+                vec_of_strings(&["RLF", ""]),
             ]
         );
     }
 
     #[test]
     fn allow_reduced_patterns_up_to_20() {
-        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRF"]);
+        let slices = vec_of_strings(&["RFRFRFRFRF"]);
         assert_eq!(
             get_pattern_sets(&slices, 1),
-            vec![vec_of_strings(&["RFRFRFRFRFRFRFRFRFRF"])]
+            vec![vec_of_strings(&["RF"]), vec_of_strings(&["RFRFRFRFRF"]),],
         );
 
-        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFF"]);
+        let slices = vec_of_strings(&["RFRFRFRFRFFFFFFFFFFFFFFFFFFFFFFF"]);
         assert_eq!(
             get_pattern_sets(&slices, 1),
-            vec![vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFF"])]
+            vec![vec_of_strings(&["RFRFRFRFRFFFFFFFFFFFFFFFFFFFFFFF"])]
         );
 
-        let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFF"]);
+        let slices = vec_of_strings(&["RFRFRFRFRFFFFFFFFFFFFFFFFFFFFFFF"]);
         let sets = get_pattern_sets(&slices, 2);
-        assert!(sets.contains(&vec_of_strings(&["", "RFRFRFRFRFRFRFRFRFRFF"])));
+        assert!(sets.contains(&vec_of_strings(&["RFRFRFRFRFFFFFFFFFFFFFFFFFFFFFFF", ""])));
     }
 
     #[test]
@@ -496,12 +549,40 @@ mod test_day_17 {
 
         let slices = vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFR"]);
         let sets = get_pattern_sets(&slices, 2);
-        assert!(!sets.contains(&vec_of_strings(&["", "RFRFRFRFRFRFRFRFRFRFR"])));
+        assert!(!sets.contains(&vec_of_strings(&["RFRFRFRFRFRFRFRFRFRFR", ""])));
     }
 
     #[test]
     fn reduces_pattern() {
-        let pattern = "RRFLLFFFRF";
-        assert_eq!(reduce_pattern(pattern), "RR1LL3R1");
+        let pattern = "RRFLLFFFRFFFFFFFFFFL";
+        assert_eq!(reduce_pattern(pattern), "R,R,1,L,L,3,R,10,L");
+    }
+
+    #[test]
+    fn calculates_main_routine() {
+        let patterns = vec_of_strings(&["RFFF", "LFFF", "FF"]);
+        let main_routine = calculate_main_routine("RFFFFFLFFFFFFFRFFF", &patterns).unwrap();
+        assert_eq!(main_routine, "A,C,B,C,C,A");
+
+        let patterns = vec_of_strings(&["R", "F", ""]);
+        let main_routine = calculate_main_routine("RF", &patterns).unwrap();
+        assert_eq!(main_routine, "A,B");
+
+        let patterns = vec_of_strings(&["F", "", ""]);
+        let main_routine = calculate_main_routine("F", &patterns).unwrap();
+        assert_eq!(main_routine, "A");
+    }
+
+    #[test]
+    fn converts_functions_to_computer_input() {
+        assert_eq!(
+            func_to_input("A,B,C,B,A,C"),
+            vec![65, 44, 66, 44, 67, 44, 66, 44, 65, 44, 67, 10]
+        );
+        assert_eq!(
+            func_to_input("L,6,L,2"),
+            vec![76, 44, 54, 44, 76, 44, 50, 10]
+        );
+        assert_eq!(func_to_input(""), vec![10]);
     }
 }
