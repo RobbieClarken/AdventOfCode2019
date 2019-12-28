@@ -1,12 +1,10 @@
-#![allow(dead_code)]
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 fn main() {
     let input = std::fs::read_to_string("input").unwrap();
     let map = Map::new(&input);
-    for (k, path) in paths_to_keys(&map) {
-        println!("{}: {}", k, path.len());
-    }
+    let steps = min_steps(map);
+    println!("{:?}", steps);
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -36,7 +34,6 @@ impl From<char> for Tile {
 #[derive(Debug, Clone)]
 struct Map {
     tiles: Vec<Vec<Tile>>,
-    foo: Vec<Tile>,
 }
 
 impl Map {
@@ -45,15 +42,20 @@ impl Map {
             .lines()
             .map(|l| l.chars().map(|c| c.into()).collect())
             .collect();
-        Self {
-            tiles,
-            foo: Vec::new(),
-        }
+        Self { tiles }
     }
 
     fn iter(&self) -> impl Iterator<Item = (Pos, &Tile)> {
         self.tiles.iter().enumerate().flat_map(|(y, row)| {
             row.iter()
+                .enumerate()
+                .map(move |(x, tile)| (Pos::new(x, y), tile))
+        })
+    }
+
+    fn iter_mut(&mut self) -> impl Iterator<Item = (Pos, &mut Tile)> {
+        self.tiles.iter_mut().enumerate().flat_map(|(y, row)| {
+            row.iter_mut()
                 .enumerate()
                 .map(move |(x, tile)| (Pos::new(x, y), tile))
         })
@@ -71,13 +73,37 @@ impl Map {
         self.tiles[pos.y][pos.x]
     }
 
-    fn entrance(&self) -> Option<Pos> {
+    fn entrance(&self) -> Pos {
         for (position, tile) in self.iter() {
             if tile == &Entrance {
-                return Some(position);
+                return position;
             }
         }
-        None
+        unreachable!("maps must have an entrance");
+    }
+
+    fn unlock(&mut self, key: char) {
+        for (_, tile) in self.iter_mut() {
+            if (tile == &Key(key)) | (tile == &Door(key.to_ascii_uppercase())) {
+                *tile = Passage;
+            }
+        }
+    }
+
+    fn unlock_many(&mut self, keys: &str) {
+        for key in keys.chars() {
+            self.unlock(key);
+        }
+    }
+
+    fn key_locations(&self) -> HashMap<char, Pos> {
+        let mut locations = HashMap::new();
+        for (pos, &tile) in self.iter() {
+            if let Key(c) = tile {
+                locations.insert(c, pos);
+            }
+        }
+        locations
     }
 }
 
@@ -89,6 +115,11 @@ struct Tracker<'a> {
 }
 
 impl<'a> Tracker<'a> {
+    fn paths_to_keys(map: &'a Map, pos: Pos) -> HashMap<char, Vec<Pos>> {
+        let mut tracker = Self::new(map, pos);
+        tracker.find_keys()
+    }
+
     fn new(map: &'a Map, pos: Pos) -> Self {
         let mut tracker = Self {
             map,
@@ -191,10 +222,48 @@ impl Pos {
     }
 }
 
-fn paths_to_keys(map: &Map) -> HashMap<char, Vec<Pos>> {
-    let pos = map.entrance().unwrap();
-    let mut tracker = Tracker::new(&map, pos);
-    tracker.find_keys()
+fn min_steps(orig_map: Map) -> usize {
+    let key_locations = orig_map.key_locations();
+    let mut collect_orders: VecDeque<(String, usize)> = Default::default();
+    for (key, path) in Tracker::paths_to_keys(&orig_map, orig_map.entrance()) {
+        collect_orders.push_back((key.to_string(), path.len()));
+    }
+    for next_len in 2..=key_locations.len() {
+        while collect_orders[0].0.len() < next_len {
+            let (order, steps) = collect_orders.pop_front().unwrap();
+            let last_key = order.chars().last().unwrap();
+            let last_key_pos = *key_locations.get(&last_key).unwrap();
+            let mut map = orig_map.clone();
+            map.unlock_many(&order);
+            for (key, path) in Tracker::paths_to_keys(&map, last_key_pos) {
+                let mut new_order = order.clone();
+                new_order.push(key);
+                collect_orders.push_back((new_order, steps + path.len()));
+            }
+        }
+        let mut best: HashMap<String, (String, usize)> = Default::default();
+        for (order, steps) in &collect_orders {
+            let mut sorted: Vec<_> = order.chars().collect();
+            let last_key = sorted.pop().unwrap();
+            sorted.sort();
+            let mut sorted: String = sorted.into_iter().collect();
+            sorted.push(last_key);
+            best.entry(sorted)
+                .and_modify(|e| {
+                    if *steps < e.1 {
+                        *e = (order.clone(), *steps);
+                    }
+                })
+                .or_insert((order.clone(), *steps));
+        }
+        let best: Vec<_> = best.values().cloned().collect();
+        collect_orders = best.into();
+    }
+    collect_orders
+        .iter()
+        .map(|(_, steps)| *steps)
+        .min()
+        .unwrap()
 }
 
 #[cfg(test)]
@@ -212,7 +281,7 @@ mod test_day_18 {
         );
         let mut expected_paths: HashMap<char, Vec<Pos>> = Default::default();
         expected_paths.insert('a', vec![Pos::new(6, 1), Pos::new(7, 1)]);
-        assert_eq!(paths_to_keys(&map), expected_paths);
+        assert_eq!(Tracker::paths_to_keys(&map, map.entrance()), expected_paths);
     }
 
     #[test]
@@ -227,6 +296,81 @@ mod test_day_18 {
         let mut expected_paths: HashMap<char, Vec<Pos>> = Default::default();
         expected_paths.insert('a', vec![Pos::new(5, 1), Pos::new(6, 1)]);
         expected_paths.insert('b', vec![Pos::new(3, 1), Pos::new(2, 1), Pos::new(1, 1)]);
-        assert_eq!(paths_to_keys(&map), expected_paths);
+        assert_eq!(Tracker::paths_to_keys(&map, map.entrance()), expected_paths);
+    }
+
+    #[test]
+    fn unlocks_door() {
+        let mut map = Map::new("aAbB");
+        map.unlock('a');
+        assert_eq!(map.get(Pos::new(0, 0)), Passage);
+        assert_eq!(map.get(Pos::new(1, 0)), Passage);
+        assert_eq!(map.get(Pos::new(2, 0)), Key('b'));
+        assert_eq!(map.get(Pos::new(3, 0)), Door('B'));
+    }
+
+    #[test]
+    fn finds_min_steps_to_get_all_keys_for_examples() {
+        let map = Map::new(
+            "\
+#########
+#b.A.@.a#
+#########
+",
+        );
+        assert_eq!(min_steps(map), 8);
+
+        let map = Map::new(
+            "\
+########################
+#f.D.E.e.C.b.A.@.a.B.c.#
+######################.#
+#d.....................#
+########################
+",
+        );
+        assert_eq!(min_steps(map), 86);
+
+        let map = Map::new(
+            "\
+########################
+#...............b.C.D.f#
+#.######################
+#.....@.a.B.c.d.A.e.F.g#
+########################
+",
+        );
+        assert_eq!(min_steps(map), 132);
+
+        let map = Map::new(
+            "\
+########################
+#@..............ac.GI.b#
+###d#e#f################
+###A#B#C################
+###g#h#i################
+########################
+",
+        );
+        assert_eq!(min_steps(map), 81);
+    }
+
+    #[test]
+    #[ignore]
+    fn finds_min_steps_to_get_all_keys_for_slow_examples() {
+        let map = Map::new(
+            "\
+#################
+#i.G..c...e..H.p#
+########.########
+#j.A..b...f..D.o#
+########@########
+#k.E..a...g..B.n#
+########.########
+#l.F..d...h..C.m#
+#################
+",
+        );
+        assert_eq!(min_steps(map), 136);
     }
 }
