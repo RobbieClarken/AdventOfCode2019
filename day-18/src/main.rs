@@ -1,9 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
+type CollectionOrder = Vec<(usize, char)>;
+
 fn main() {
     let t0 = Instant::now();
     challenge_1();
+    challenge_2();
     println!("Time taken: {}", t0.elapsed().as_millis());
 }
 
@@ -11,7 +14,15 @@ fn challenge_1() {
     let input = std::fs::read_to_string("input").unwrap();
     let map = Map::new(&input);
     let steps = min_steps(map);
-    println!("Steps to collect all keys: {}", steps);
+    println!("Challenge 1: Steps to collect all keys: {}", steps);
+}
+
+fn challenge_2() {
+    let input = std::fs::read_to_string("input").unwrap();
+    let mut map = Map::new(&input);
+    apply_entrance_correction(&mut map);
+    let steps = min_steps(map);
+    println!("Challenge 2: Steps to collect all keys: {}", steps);
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -34,6 +45,18 @@ impl From<char> for Tile {
             'a'..='z' => Key(c),
             'A'..='Z' => Door(c),
             _ => unreachable!("{} cannot be converted to Tile", c),
+        }
+    }
+}
+
+impl Into<char> for Tile {
+    fn into(self) -> char {
+        match self {
+            Entrance => '@',
+            Wall => '#',
+            Passage => '.',
+            Key(c) => c,
+            Door(c) => c,
         }
     }
 }
@@ -80,13 +103,15 @@ impl Map {
         self.tiles[pos.y][pos.x]
     }
 
-    fn entrance(&self) -> Pos {
-        for (position, tile) in self.iter() {
-            if tile == &Entrance {
-                return position;
-            }
-        }
-        unreachable!("maps must have an entrance");
+    fn set(&mut self, pos: Pos, tile: Tile) {
+        self.tiles[pos.y][pos.x] = tile;
+    }
+
+    fn entrances(&self) -> Vec<Pos> {
+        self.iter()
+            .filter(|(_, tile)| *tile == &Entrance)
+            .map(|(position, _)| position)
+            .collect()
     }
 
     fn unlock(&mut self, key: char) {
@@ -97,8 +122,11 @@ impl Map {
         }
     }
 
-    fn unlock_many(&mut self, keys: &str) {
-        for key in keys.chars() {
+    fn unlock_many<I>(&mut self, keys: I)
+    where
+        I: Iterator<Item = char>,
+    {
+        for key in keys {
             self.unlock(key);
         }
     }
@@ -111,6 +139,20 @@ impl Map {
             }
         }
         locations
+    }
+}
+
+impl std::fmt::Display for Map {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        let mut row = 0;
+        for (pos, tile) in self.iter() {
+            if pos.y != row {
+                writeln!(f)?;
+                row = pos.y;
+            }
+            write!(f, "{}", Into::<char>::into(*tile))?;
+        }
+        Ok(())
     }
 }
 
@@ -211,6 +253,7 @@ impl Pos {
     fn new(x: usize, y: usize) -> Self {
         Self { x, y }
     }
+
     fn neighbours(&self, x_max: usize, y_max: usize) -> Vec<Self> {
         let (x, y) = (self.x, self.y);
         let mut out = Vec::new();
@@ -230,32 +273,72 @@ impl Pos {
     }
 }
 
+fn last_positions(
+    collect_order: &[(usize, char)],
+    entrances: &[Pos],
+    key_locations: &HashMap<char, Pos>,
+) -> Vec<Pos> {
+    let num_robots = entrances.len();
+    let mut last_keys = Vec::with_capacity(num_robots);
+    last_keys.resize(num_robots, None);
+    for (robot, key) in collect_order {
+        last_keys[*robot] = Some(key);
+    }
+    last_keys
+        .iter()
+        .zip(entrances)
+        .map(|(k, entrance)| {
+            if let Some(k) = k {
+                *key_locations.get(k).unwrap()
+            } else {
+                *entrance
+            }
+        })
+        .collect()
+}
+
 fn min_steps(orig_map: Map) -> usize {
     let key_locations = orig_map.key_locations();
-    let mut collect_orders: VecDeque<(String, usize)> = Default::default();
-    for (key, path) in Tracker::paths_to_keys(&orig_map, orig_map.entrance()) {
-        collect_orders.push_back((key.to_string(), path.len()));
+    let mut collect_orders: VecDeque<(CollectionOrder, usize)> = Default::default();
+    let entrances = orig_map.entrances();
+    for (robot, entrance) in entrances.iter().enumerate() {
+        for (key, path) in Tracker::paths_to_keys(&orig_map, *entrance) {
+            collect_orders.push_back((vec![(robot, key)], path.len()));
+        }
     }
     for next_len in 2..=key_locations.len() {
         while collect_orders[0].0.len() < next_len {
             let (order, steps) = collect_orders.pop_front().unwrap();
-            let last_key = order.chars().last().unwrap();
-            let last_key_pos = *key_locations.get(&last_key).unwrap();
             let mut map = orig_map.clone();
-            map.unlock_many(&order);
-            for (key, path) in Tracker::paths_to_keys(&map, last_key_pos) {
-                let mut new_order = order.clone();
-                new_order.push(key);
-                collect_orders.push_back((new_order, steps + path.len()));
+            map.unlock_many(order.iter().map(|(_, key)| *key));
+            for (robot, robot_pos) in last_positions(&order, &entrances, &key_locations)
+                .iter()
+                .enumerate()
+            {
+                for (key, path) in Tracker::paths_to_keys(&map, *robot_pos) {
+                    let mut new_order = order.clone();
+                    new_order.push((robot, key));
+                    collect_orders.push_back((new_order, steps + path.len()));
+                }
             }
         }
-        let mut best: HashMap<String, (String, usize)> = Default::default();
+        let mut best: HashMap<Vec<Vec<char>>, (CollectionOrder, usize)> = Default::default();
         for (order, steps) in &collect_orders {
-            let mut sorted: Vec<_> = order.chars().collect();
-            let last_key = sorted.pop().unwrap();
-            sorted.sort();
-            let mut sorted: String = sorted.into_iter().collect();
-            sorted.push(last_key);
+            let num_robots = entrances.len();
+            let mut sorted: Vec<Vec<char>> = Vec::with_capacity(num_robots);
+            for robot in 0..num_robots {
+                let mut order_for_robot: Vec<_> = order
+                    .iter()
+                    .filter(|(r, _)| robot == *r)
+                    .map(|(_, key)| *key)
+                    .collect();
+                if !order_for_robot.is_empty() {
+                    let last = order_for_robot.pop().unwrap();
+                    order_for_robot.sort();
+                    order_for_robot.push(last);
+                }
+                sorted.push(order_for_robot);
+            }
             best.entry(sorted)
                 .and_modify(|e| {
                     if *steps < e.1 {
@@ -274,6 +357,19 @@ fn min_steps(orig_map: Map) -> usize {
         .unwrap()
 }
 
+fn apply_entrance_correction(map: &mut Map) {
+    let center = *map.entrances().first().unwrap();
+    map.set(center, Wall);
+    map.set(Pos::new(center.x - 1, center.y), Wall);
+    map.set(Pos::new(center.x + 1, center.y), Wall);
+    map.set(Pos::new(center.x, center.y - 1), Wall);
+    map.set(Pos::new(center.x, center.y + 1), Wall);
+    map.set(Pos::new(center.x - 1, center.y - 1), Entrance);
+    map.set(Pos::new(center.x - 1, center.y + 1), Entrance);
+    map.set(Pos::new(center.x + 1, center.y - 1), Entrance);
+    map.set(Pos::new(center.x + 1, center.y + 1), Entrance);
+}
+
 #[cfg(test)]
 mod test_day_18 {
     use super::*;
@@ -289,7 +385,10 @@ mod test_day_18 {
         );
         let mut expected_paths: HashMap<char, Vec<Pos>> = Default::default();
         expected_paths.insert('a', vec![Pos::new(6, 1), Pos::new(7, 1)]);
-        assert_eq!(Tracker::paths_to_keys(&map, map.entrance()), expected_paths);
+        assert_eq!(
+            Tracker::paths_to_keys(&map, *map.entrances().first().unwrap()),
+            expected_paths
+        );
     }
 
     #[test]
@@ -304,7 +403,10 @@ mod test_day_18 {
         let mut expected_paths: HashMap<char, Vec<Pos>> = Default::default();
         expected_paths.insert('a', vec![Pos::new(5, 1), Pos::new(6, 1)]);
         expected_paths.insert('b', vec![Pos::new(3, 1), Pos::new(2, 1), Pos::new(1, 1)]);
-        assert_eq!(Tracker::paths_to_keys(&map, map.entrance()), expected_paths);
+        assert_eq!(
+            Tracker::paths_to_keys(&map, *map.entrances().first().unwrap()),
+            expected_paths
+        );
     }
 
     #[test]
@@ -394,5 +496,88 @@ mod test_day_18 {
 ",
         );
         assert_eq!(min_steps(map), 136);
+    }
+
+    #[test]
+    fn applies_entrance_correction() {
+        let mut map = Map::new(
+            "\
+#######
+#a.#Cd#
+##...##
+##.@.##
+##...##
+#cB#Ab#
+#######",
+        );
+        apply_entrance_correction(&mut map);
+        assert_eq!(
+            map.to_string(),
+            "\
+#######
+#a.#Cd#
+##@#@##
+#######
+##@#@##
+#cB#Ab#
+#######"
+        );
+        assert_eq!(map.entrances().len(), 4);
+    }
+
+    #[test]
+    fn calculates_steps_for_multi_robot_case() {
+        let map = Map::new(
+            "\
+#######
+#a.#Cd#
+##@#@##
+#######
+##@#@##
+#cB#Ab#
+#######",
+        );
+        assert_eq!(min_steps(map), 8);
+
+        let map = Map::new(
+            "\
+###############
+#d.ABC.#.....a#
+######@#@######
+###############
+######@#@######
+#b.....#.....c#
+###############
+",
+        );
+        assert_eq!(min_steps(map), 24);
+
+        let map = Map::new(
+            "\
+#############
+#DcBa.#.GhKl#
+#.###@#@#I###
+#e#d#####j#k#
+###C#@#@###J#
+#fEbA.#.FgHi#
+#############
+",
+        );
+        assert_eq!(min_steps(map), 32);
+
+        let map = Map::new(
+            "\
+#############
+#g#f.D#..h#l#
+#F###e#E###.#
+#dCba@#@BcIJ#
+#############
+#nK.L@#@G...#
+#M###N#H###.#
+#o#m..#i#jk.#
+#############
+",
+        );
+        assert_eq!(min_steps(map), 72);
     }
 }
