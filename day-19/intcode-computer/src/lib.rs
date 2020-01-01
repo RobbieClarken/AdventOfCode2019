@@ -37,6 +37,7 @@ impl ModeGenerator {
     }
 }
 
+#[derive(Clone)]
 pub struct Computer {
     program: Vec<i64>,
     input: VecDeque<i64>,
