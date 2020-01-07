@@ -2,6 +2,7 @@ use std::collections::{HashSet, VecDeque};
 
 fn main() {
     challenge_1();
+    challenge_2();
 }
 
 fn challenge_1() {
@@ -10,6 +11,15 @@ fn challenge_1() {
     println!(
         "Challenge 1: Minimum number of steps through maze = {}",
         maze.min_steps()
+    );
+}
+
+fn challenge_2() {
+    let input = std::fs::read_to_string("input").unwrap();
+    let maze = Maze::new(&input);
+    println!(
+        "Challenge 2: Minimum number of steps through maze = {}",
+        maze.min_steps_with_recursion()
     );
 }
 
@@ -33,11 +43,15 @@ impl Maze {
                 } else if let Some(('Z', 'Z')) = label {
                     maze.tiles[y][x] = Tile::Exit;
                 } else if let Some((l1, l2)) = label {
-                    maze.tiles[y][x] = Tile::Portal(l1, l2);
+                    maze.tiles[y][x] = Tile::Portal((l1, l2));
                 }
             }
         }
         maze
+    }
+
+    fn is_outer_tile(&self, p: Pos) -> bool {
+        p.x == 2 || p.y == 2 || p.x == self.max_x() - 2 || p.y == self.max_y() - 2
     }
 
     fn max_x(&self) -> usize {
@@ -102,6 +116,11 @@ impl Maze {
         let entrance = self.find_tiles(Tile::Entrance)[0];
         PathFinder::shortest_path(self, entrance)
     }
+
+    fn min_steps_with_recursion(self) -> usize {
+        let entrance = self.find_tiles(Tile::Entrance)[0];
+        RecursivePathFinder::shortest_path(self, entrance)
+    }
 }
 
 struct PathFinder {
@@ -112,7 +131,7 @@ struct PathFinder {
 
 impl PathFinder {
     pub fn shortest_path(maze: Maze, start: Pos) -> usize {
-        let mut finder = PathFinder {
+        let mut finder = Self {
             maze,
             queue: vec![].into(),
             visited: HashSet::new(),
@@ -125,7 +144,7 @@ impl PathFinder {
         loop {
             let (p, distance) = self.next();
             let t = self.maze.get(p);
-            if let Tile::Portal(_, _) = t {
+            if let Tile::Portal(_) = t {
                 self.insert(self.maze.portal_exit(p), distance + 1);
             }
             for neighbour in p.neighbours() {
@@ -135,7 +154,7 @@ impl PathFinder {
                 let t = self.maze.get(neighbour);
                 match t {
                     Tile::Exit => return distance + 1,
-                    Tile::Passage | Tile::Portal(_, _) => {
+                    Tile::Passage | Tile::Portal(_) => {
                         self.insert(neighbour, distance + 1);
                     }
                     Tile::Wall | Tile::External(_) => {}
@@ -151,6 +170,66 @@ impl PathFinder {
     }
 
     fn next(&mut self) -> (Pos, usize) {
+        self.queue.pop_front().unwrap()
+    }
+}
+
+struct RecursivePathFinder {
+    maze: Maze,
+    queue: VecDeque<(Pos, usize, usize)>,
+    visited: HashSet<(Pos, usize)>,
+}
+
+impl RecursivePathFinder {
+    pub fn shortest_path(maze: Maze, start: Pos) -> usize {
+        let mut finder = Self {
+            maze,
+            queue: vec![].into(),
+            visited: HashSet::new(),
+        };
+        finder.find_path(start)
+    }
+
+    fn find_path(&mut self, start: Pos) -> usize {
+        self.insert(start, 0, 0);
+        loop {
+            let (p, level, distance) = self.next();
+            let t = self.maze.get(p);
+            if let Tile::Portal(_) = t {
+                if self.maze.is_outer_tile(p) {
+                    if level > 0 {
+                        self.insert(self.maze.portal_exit(p), level - 1, distance + 1);
+                    }
+                } else {
+                    self.insert(self.maze.portal_exit(p), level + 1, distance + 1);
+                }
+            }
+            for neighbour in p.neighbours() {
+                if self.visited.contains(&(neighbour, level)) {
+                    continue;
+                }
+                let t = self.maze.get(neighbour);
+                match t {
+                    Tile::Exit => {
+                        if level == 0 {
+                            return distance + 1;
+                        }
+                    }
+                    Tile::Passage | Tile::Portal(_) => {
+                        self.insert(neighbour, level, distance + 1);
+                    }
+                    Tile::Entrance | Tile::Wall | Tile::External(_) => {}
+                };
+            }
+        }
+    }
+
+    fn insert(&mut self, pos: Pos, level: usize, distance: usize) {
+        self.queue.push_back((pos, level, distance));
+        self.visited.insert((pos, level));
+    }
+
+    fn next(&mut self) -> (Pos, usize, usize) {
         self.queue.pop_front().unwrap()
     }
 }
@@ -198,7 +277,7 @@ enum Tile {
     Passage,
     Entrance,
     Exit,
-    Portal(char, char),
+    Portal((char, char)),
 }
 
 impl From<char> for Tile {
@@ -249,7 +328,7 @@ FG..#########.....#
         assert_eq!(maze.get(Pos::new(13, 16)), Tile::Exit);
         assert_eq!(maze.get(Pos::new(9, 3)), Tile::Passage);
         assert_eq!(maze.get(Pos::new(2, 2)), Tile::Wall);
-        assert_eq!(maze.get(Pos::new(2, 8)), Tile::Portal('B', 'C'));
+        assert_eq!(maze.get(Pos::new(2, 8)), Tile::Portal(('B', 'C')));
     }
 
     #[test]
@@ -268,8 +347,8 @@ BC...DE
         );
         assert_eq!(maze.get(Pos::new(3, 2)), Tile::Entrance);
         assert_eq!(maze.get(Pos::new(3, 4)), Tile::Exit);
-        assert_eq!(maze.get(Pos::new(2, 3)), Tile::Portal('B', 'C'));
-        assert_eq!(maze.get(Pos::new(4, 3)), Tile::Portal('D', 'E'));
+        assert_eq!(maze.get(Pos::new(2, 3)), Tile::Portal(('B', 'C')));
+        assert_eq!(maze.get(Pos::new(4, 3)), Tile::Portal(('D', 'E')));
 
         let maze = Maze::new(
             "
@@ -285,8 +364,8 @@ ZZ...AA
         );
         assert_eq!(maze.get(Pos::new(4, 3)), Tile::Entrance);
         assert_eq!(maze.get(Pos::new(2, 3)), Tile::Exit);
-        assert_eq!(maze.get(Pos::new(3, 2)), Tile::Portal('B', 'C'));
-        assert_eq!(maze.get(Pos::new(3, 4)), Tile::Portal('D', 'E'));
+        assert_eq!(maze.get(Pos::new(3, 2)), Tile::Portal(('B', 'C')));
+        assert_eq!(maze.get(Pos::new(3, 4)), Tile::Portal(('D', 'E')));
 
         let maze = Maze::new(
             "
@@ -455,5 +534,73 @@ YN......#               VT..#....QG
             .trim_matches('\n'),
         );
         assert_eq!(maze.min_steps(), 58);
+    }
+
+    #[test]
+    fn calculates_min_steps_with_recursion_for_simple_case() {
+        let maze = Maze::new(
+            "
+               
+               
+  ###########  
+  #.#     #.#  
+AA...BC BC...ZZ
+  #.#     #.#  
+  #.#   DE...DE
+  #.#     #.#  
+  ###########  
+               
+               
+"
+            .trim_matches('\n'),
+        );
+        assert_eq!(maze.min_steps_with_recursion(), 12);
+    }
+
+    #[test]
+    fn calculates_min_steps_with_recursion_for_example() {
+        let maze = Maze::new(
+            "
+             Z L X W       C                 
+             Z P Q B       K                 
+  ###########.#.#.#.#######.###############  
+  #...#.......#.#.......#.#.......#.#.#...#  
+  ###.#.#.#.#.#.#.#.###.#.#.#######.#.#.###  
+  #.#...#.#.#...#.#.#...#...#...#.#.......#  
+  #.###.#######.###.###.#.###.###.#.#######  
+  #...#.......#.#...#...#.............#...#  
+  #.#########.#######.#.#######.#######.###  
+  #...#.#    F       R I       Z    #.#.#.#  
+  #.###.#    D       E C       H    #.#.#.#  
+  #.#...#                           #...#.#  
+  #.###.#                           #.###.#  
+  #.#....OA                       WB..#.#..ZH
+  #.###.#                           #.#.#.#  
+CJ......#                           #.....#  
+  #######                           #######  
+  #.#....CK                         #......IC
+  #.###.#                           #.###.#  
+  #.....#                           #...#.#  
+  ###.###                           #.#.#.#  
+XF....#.#                         RF..#.#.#  
+  #####.#                           #######  
+  #......CJ                       NM..#...#  
+  ###.#.#                           #.###.#  
+RE....#.#                           #......RF
+  ###.###        X   X       L      #.#.#.#  
+  #.....#        F   Q       P      #.#.#.#  
+  ###.###########.###.#######.#########.###  
+  #.....#...#.....#.......#...#.....#.#...#  
+  #####.#.###.#######.#######.###.###.#.#.#  
+  #.......#.......#.#.#.#.#...#...#...#.#.#  
+  #####.###.#####.#.#.#.#.###.###.#.###.###  
+  #.......#.....#.#...#...............#...#  
+  #############.#.#.###.###################  
+               A O F   N                     
+               A A D   M                     
+"
+            .trim_matches('\n'),
+        );
+        assert_eq!(maze.min_steps_with_recursion(), 396);
     }
 }
