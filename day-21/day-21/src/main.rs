@@ -14,7 +14,11 @@ fn challenge_1() {
             NOT C T
             OR T J
             AND D J
-            WALK
+            NOT T T
+            OR H T
+            OR E T
+            AND T J
+            RUN
         "
     .trim()
     .lines()
@@ -38,6 +42,7 @@ enum Instruction {
     OR(char, char),
     NOT(char, char),
     WALK,
+    RUN,
 }
 
 use Instruction::*;
@@ -50,6 +55,7 @@ impl Instruction {
             "OR" => OR(to_char(parts[1]), to_char(parts[2])),
             "NOT" => NOT(to_char(parts[1]), to_char(parts[2])),
             "WALK" => WALK,
+            "RUN" => RUN,
             _ => unreachable!(),
         }
     }
@@ -60,6 +66,7 @@ impl Instruction {
             OR(a, b) => format!("OR {} {}", a, b),
             NOT(a, b) => format!("NOT {} {}", a, b),
             WALK => "WALK".to_owned(),
+            RUN => "RUN".to_owned(),
         };
         s.chars().map(|c| c as i64).collect()
     }
@@ -85,13 +92,22 @@ mod test_day_21 {
 
     impl Instruction {
         fn execute(&self, readonly_regs: &[bool], reg_t_j: (bool, bool)) -> (bool, bool) {
-            let mut regs: HashMap<char, bool> = HashMap::new();
-            regs.insert('A', readonly_regs[0]);
-            regs.insert('B', readonly_regs[1]);
-            regs.insert('C', readonly_regs[2]);
-            regs.insert('D', readonly_regs[3]);
-            regs.insert('T', reg_t_j.0);
-            regs.insert('J', reg_t_j.1);
+            let mut regs: HashMap<_, _> = [
+                ('A', *readonly_regs.get(0).unwrap_or(&true)),
+                ('B', *readonly_regs.get(1).unwrap_or(&true)),
+                ('C', *readonly_regs.get(2).unwrap_or(&true)),
+                ('D', *readonly_regs.get(3).unwrap_or(&true)),
+                ('E', *readonly_regs.get(4).unwrap_or(&true)),
+                ('F', *readonly_regs.get(5).unwrap_or(&true)),
+                ('G', *readonly_regs.get(6).unwrap_or(&true)),
+                ('H', *readonly_regs.get(7).unwrap_or(&true)),
+                ('I', *readonly_regs.get(8).unwrap_or(&true)),
+                ('T', reg_t_j.0),
+                ('J', reg_t_j.1),
+            ]
+            .iter()
+            .cloned()
+            .collect();
             match self {
                 AND(x, y) => {
                     let x_val = *regs.get(x).unwrap();
@@ -107,15 +123,20 @@ mod test_day_21 {
                     let x_val = *regs.get(x).unwrap();
                     regs.insert(*y, !x_val);
                 }
-                WALK => {}
+                WALK | RUN => {}
             };
             println!(
-                "{:>16} -- A:{} B:{} C:{} D:{} T:{} J:{}",
+                "{:>16} -- A:{} B:{} C:{} D:{} E:{} F:{} G:{} H:{} I:{} T:{} J:{}",
                 format!("{:?}", self),
                 *regs.get(&'A').unwrap() as u8,
                 *regs.get(&'B').unwrap() as u8,
                 *regs.get(&'C').unwrap() as u8,
                 *regs.get(&'D').unwrap() as u8,
+                *regs.get(&'E').unwrap() as u8,
+                *regs.get(&'F').unwrap() as u8,
+                *regs.get(&'G').unwrap() as u8,
+                *regs.get(&'H').unwrap() as u8,
+                *regs.get(&'I').unwrap() as u8,
                 *regs.get(&'T').unwrap() as u8,
                 *regs.get(&'J').unwrap() as u8,
             );
@@ -131,16 +152,17 @@ mod test_day_21 {
             .collect();
         let platform: Vec<bool> = platform.chars().map(|c| c == '#').collect();
         let mut pos = 0;
-        while pos < platform.len() - 4 {
+        while pos < platform.len() {
             println!("{}", pos);
             if !platform[pos] {
                 return false;
             }
             let mut registries = (false, false);
             for instruction in &program {
-                registries = instruction.execute(&platform[pos + 1..=pos + 4], registries);
+                registries = instruction.execute(&platform[pos + 1..], registries);
             }
             if registries.1 {
+                println!("JUMP!");
                 pos += 4;
             } else {
                 pos += 1;
@@ -183,11 +205,18 @@ mod test_day_21 {
             NOT C T
             OR T J
             AND D J
-            WALK
+            NOT T T
+            OR H T
+            OR E T
+            AND T J
+            RUN
         ";
         assert!(test_program(&program, "#################"));
         assert!(test_program(&program, "#####.###########"));
         assert!(test_program(&program, "#####..#.########"));
         assert!(test_program(&program, "#####...#########"));
+        assert!(test_program(&program, "#####.#.##.######"));
+        assert!(test_program(&program, "#####.######..###"));
+        assert!(test_program(&program, "#####...##...####"));
     }
 }
