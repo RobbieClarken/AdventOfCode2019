@@ -1,0 +1,8 @@
+[package]
+name = "day-25"
+version = "0.1.0"
+authors = ["RobbieClarken <robbie.clarken@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+intcode-computer = {path="../intcode-computer"}
