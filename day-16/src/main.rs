@@ -5,6 +5,7 @@ const PATTERN: [i32; 4] = [0, 1, 0, -1];
 
 fn main() {
     challenge_1();
+    challenge_2();
 }
 
 fn challenge_1() {
@@ -13,6 +14,26 @@ fn challenge_1() {
     println!(
         "Challenge 1: The first 8 digits of the output are {}",
         &output.to_string()[..8]
+    );
+}
+
+fn challenge_2() {
+    let input = std::fs::read_to_string("input").unwrap().trim().to_owned();
+    let offset: usize = input[..7].parse().unwrap();
+    let mut input: Vec<u64> = input
+        .chars()
+        .map(|c| c.to_string().parse().unwrap())
+        .cycle()
+        .take(10_000 * input.len())
+        .skip(offset)
+        .collect();
+    for _ in 0..100 {
+        input = ch2_transform(input);
+    }
+    let answer: String = input.iter().take(8).map(|v| format!("{}", v)).collect();
+    println!(
+        "Challenge 2: The 8 digit message embedded in the output = {}",
+        answer
     );
 }
 
@@ -65,6 +86,13 @@ impl ToString for Signal {
     }
 }
 
+fn ch2_transform(mut input: Vec<u64>) -> Vec<u64> {
+    for i in (0..(input.len() - 1)).rev() {
+        input[i] = (input[i] + input[i + 1]) % 10;
+    }
+    input
+}
+
 #[cfg(test)]
 mod test_day_16 {
     use super::*;
@@ -88,5 +116,18 @@ mod test_day_16 {
 
         let input: Signal = "69317163492948606335995924319873".into();
         assert_eq!(&input.fft(100).to_string()[..8], "52432133");
+    }
+
+    #[test]
+    fn applies_challenge_2_transform() {
+        let input = vec![5, 6, 7, 8, 9];
+        let expected_output = vec![
+            (5 + 6 + 7 + 8 + 9) % 10,
+            (6 + 7 + 8 + 9) % 10,
+            (7 + 8 + 9) % 10,
+            (8 + 9) % 10,
+            9 % 10,
+        ];
+        assert_eq!(ch2_transform(input), expected_output);
     }
 }
