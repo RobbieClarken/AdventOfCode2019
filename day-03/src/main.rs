@@ -14,7 +14,7 @@ impl FromStr for Step {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let direction = s
             .chars()
-            .nth(0)
+            .next()
             .ok_or_else(|| Error::new(InvalidData, "failed to parse Step direction"))?;
         let distance: u32 = s[1..]
             .parse()

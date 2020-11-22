@@ -102,7 +102,7 @@ impl State {
 
     fn next_cell_state(&self, x: usize, y: usize) -> CellState {
         let mut neighbours_infested = 0;
-        for &(dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)].iter() {
+        for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
             let x_neighbour = x as isize + dx;
             let y_neighbour = y as isize + dy;
             if x_neighbour < 0
@@ -131,7 +131,7 @@ impl State {
         outer: Option<&State>,
     ) -> CellState {
         let mut neighbours_infested = 0;
-        for &(dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)].iter() {
+        for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
             let x_neighbour = x as isize + dx;
             let y_neighbour = y as isize + dy;
             if x_neighbour >= 0

@@ -28,7 +28,7 @@ fn main() {
 fn usage() {
     let mut args = env::args();
     println!("Usage:");
-    println!("    {} NUMBER", args.nth(0).unwrap());
+    println!("    {} NUMBER", args.next().unwrap());
     println!();
     println!("Arguments:");
     println!("    number: Which part of the puzzle to solve (1 or 2)");

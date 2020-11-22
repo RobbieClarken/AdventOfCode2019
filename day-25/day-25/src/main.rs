@@ -10,7 +10,7 @@ fn main() -> io::Result<()> {
     let mut history: Vec<String> = Vec::new();
     run_commands_from_file(&mut computer, &mut map, &mut history);
     // run_interactive(&mut computer, &mut map, &mut history)?;
-    // find_combination_of_items_to_pass_floor(&mut computer, &mut map, &mut history);
+    // find_combination_of_items_to_pass_floor(&mut computer);
     Ok(())
 }
 
@@ -80,8 +80,9 @@ fn run_interactive(
         print!("{}", map.draw());
         print!("{}", output);
 
-        let command = loop {
-            let mut command = String::new();
+        let mut command;
+        loop {
+            command = String::new();
             io::stdin().read_line(&mut command)?;
             command = String::from(match command.trim().as_ref() {
                 "n" => "north\n",
@@ -101,9 +102,9 @@ fn run_interactive(
             }
             map.process(&command.trim());
             if command != "ignore\n" {
-                break command;
+                break;
             }
-        };
+        }
         history.push(command.clone());
         input = command.chars().map(|c| c as i64).collect();
     }
