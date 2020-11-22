@@ -20,9 +20,36 @@ fn challenge_1() {
 fn challenge_2() {
     let input = std::fs::read_to_string("input").unwrap().trim().to_owned();
     let offset: usize = input[..7].parse().unwrap();
-    let mut input: Vec<u64> = input
+    let signal_length = 10_000 * input.len();
+    // the FFT transformation applied to last half of digits is considerably simpler
+    // compared with the first half of digits because the pattern to be applied
+    // consists of a series of `0` followed by a series of `1`. For the `i`-th digit,
+    // if `i > n/2`, where `n` is the length of the signal, a single phase
+    // transformation will be:
+    //
+    // d_i' = 0 * d_0 + 0 * d_1 + ... + 0 * d_{i-1} + 1 * d_i + ... + d_{n-1} mod 10
+    //
+    // This implies:
+    //
+    // d_i' = d_i + d_{i + 1}' mod 10
+    // and
+    // d_{n-1}' = d_{n-1}
+    //
+    // Thus to determine the FFT for the last half of digits we simply need to add to
+    // each digit all the digits to the right of it. This can be achieved more
+    // efficiently by calculating the transformed digits from right-to-left:
+    //
+    // d_{n-1}' = d_{n-1}
+    // d_{n-2}' = d_{n-1}' + d_{n-1} mod 10
+    // d_{n-3}' = d_{n-2}' + d_{n-1} mod 10
+    // ...
+    //
+    // This simplification will only work if the message offset lies in the last half
+    // of digits so we better check that first:
+    assert!(offset > signal_length / 2);
+    let mut input = input
         .chars()
-        .map(|c| c.to_string().parse().unwrap())
+        .map(|c| c.to_digit(10).unwrap())
         .cycle()
         .take(10_000 * input.len())
         .skip(offset)
@@ -86,9 +113,11 @@ impl ToString for Signal {
     }
 }
 
-fn ch2_transform(mut input: Vec<u64>) -> Vec<u64> {
-    for i in (0..(input.len() - 1)).rev() {
-        input[i] = (input[i] + input[i + 1]) % 10;
+fn ch2_transform(mut input: Vec<u32>) -> Vec<u32> {
+    let mut acc = 0;
+    for i in (0..input.len()).rev() {
+        acc += input[i];
+        input[i] = acc % 10;
     }
     input
 }
